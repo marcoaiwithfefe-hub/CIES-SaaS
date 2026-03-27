@@ -381,4 +381,104 @@
   .audit-table tr + tr td {
     border-top: 1px solid color-mix(in srgb, var(--color-outline-var) 15%, transparent);
   }
+
+  /* --------------------------------------------------------
+     SKELETON / SHIMMER — loading state while Playwright runs
+     ui-ux-pro-max: loading-states, reduced-motion safe
+     -------------------------------------------------------- */
+  @keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+  }
+
+  .skeleton-block {
+    background: linear-gradient(
+      90deg,
+      var(--color-surface-high)   0%,
+      var(--color-surface-bright) 50%,
+      var(--color-surface-high)   100%
+    );
+    background-size: 600px 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-block {
+      animation: none;
+      background: var(--color-surface-high);
+    }
+  }
+
+  /* --------------------------------------------------------
+     CAPTURE FAILED BADGE — overlaid on placeholder images
+     -------------------------------------------------------- */
+  .chip-capture-failed {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: color-mix(in srgb, var(--color-error-container) 35%, transparent);
+    color: var(--color-error);
+    font-family: var(--font-body);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08rem;
+    text-transform: uppercase;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.375rem;
+  }
+
+  /* --------------------------------------------------------
+     STAGE PROGRESS — animated pulse dot next to step label
+     -------------------------------------------------------- */
+  @keyframes stage-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .stage-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-primary-cta);
+    animation: stage-pulse 1.2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stage-dot { animation: none; }
+  }
+
+  /* --------------------------------------------------------
+     STATUS LIVE DOT — sidebar "Online" indicator
+     Design Spells: concentric pulse ring (not opacity blink)
+     GPU-accelerated via transform & opacity only.
+     -------------------------------------------------------- */
+  .status-live-dot {
+    position: relative;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    flex-shrink: 0;
+  }
+
+  .status-live-dot::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1.5px solid #4ade80;
+    opacity: 0;
+    animation: live-ring 2s ease-out infinite;
+  }
+
+  @keyframes live-ring {
+    0%   { transform: scale(0.8); opacity: 0.6; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .status-live-dot::after { animation: none; opacity: 0.4; transform: scale(1); }
+  }
 }

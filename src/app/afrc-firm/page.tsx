@@ -1,17 +1,9 @@
-import type { Metadata } from 'next';
-import { DashboardShell } from '@/components/layout/DashboardShell';
-import { AfrcFirmPanel } from '@/components/panels/AfrcFirmPanel';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'AFRC Firm — CIES Auditor',
-  description: 'Search AFRC CPA firm public register.',
-};
-
-export default function AfrcFirmPage() {
-  const isMockMode = process.env.MOCK_MODE === 'true';
-  return (
-    <DashboardShell>
-      <AfrcFirmPanel isMockMode={isMockMode} />
-    </DashboardShell>
-  );
+/**
+ * Legacy route — tools now live on the single-page workspace at /.
+ * Redirect any bookmarks or stale browser tabs.
+ */
+export default function AfrcFirmRedirect() {
+  redirect('/');
 }

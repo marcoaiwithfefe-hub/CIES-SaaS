@@ -5,16 +5,28 @@ import { captureSfc } from '@/actions/sfc';
 import type { CaptureResult } from '@/actions/hkex';
 import { CaptureButton } from '@/components/shared/CaptureButton';
 import { ProgressStepper } from '@/components/shared/ProgressStepper';
+import { CaptureSkeleton } from '@/components/shared/CaptureSkeleton';
 import { ScreenshotGallery } from '@/components/shared/ScreenshotGallery';
 
+/**
+ * SFC CIES Capture Panel
+ *
+ * Flow:
+ *  1. User enters fund names (one per line) → clicks Capture
+ *  2. isPending = true → CaptureSkeleton + ProgressStepper
+ *  3. Server Action returns row-level base64 screenshots → ScreenshotGallery
+ *
+ * ui-ux-pro-max: loading-states, ARIA live, keyboard-nav
+ */
 export function SfcPanel({ isMockMode }: { isMockMode: boolean }) {
   const [input, setInput] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const fundNames = input.split('\n').map((n) => n.trim()).filter(Boolean);
+
   const handleCapture = () => {
-    const fundNames = input.split('\n').map((n) => n.trim()).filter(Boolean);
     if (fundNames.length === 0) return;
     if (fundNames.length > 10) {
       setError('Please limit your search to a maximum of 10 fund names at a time.');
@@ -62,19 +74,33 @@ export function SfcPanel({ isMockMode }: { isMockMode: boolean }) {
             style={{ minHeight: '120px', resize: 'vertical', borderRadius: '0.5rem 0.5rem 0 0' }}
             placeholder={'e.g. AIA Income\nTracker Fund\nHSBC Growth'}
             aria-required="true"
+            aria-describedby="fundNames-hint"
             disabled={isPending}
           />
           <CaptureButton isPending={isPending} disabled={!input.trim()} onClick={handleCapture} />
         </div>
+
+        <p id="fundNames-hint" className="label-meta">
+          Tip: Use partial names — the tool will match any row containing your keywords.
+        </p>
       </div>
 
       {error && (
         <div className="error-block" role="alert" aria-live="assertive">{error}</div>
       )}
 
-      {isPending && <ProgressStepper message="Loading SFC register…" step={2} totalSteps={5} />}
+      {/* ── Loading state ─────────────────────────────────────────────────── */}
+      {isPending && (
+        <>
+          <ProgressStepper tool="sfc" />
+          <CaptureSkeleton count={Math.min(fundNames.length || 1, 3)} label="Searching SFC register…" />
+        </>
+      )}
 
-      <ScreenshotGallery results={results} prefix="sfc" onClear={() => setResults([])} />
+      {/* ── Results ──────────────────────────────────────────────────────── */}
+      {!isPending && (
+        <ScreenshotGallery results={results} prefix="sfc" onClear={() => setResults([])} />
+      )}
     </div>
   );
 }

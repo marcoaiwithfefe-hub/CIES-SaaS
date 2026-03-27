@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+
+# Agent skills (local dev tooling only)
+.agent/
 .pnp
 .pnp.js
 
@@ -39,3 +42,22 @@ yarn-error.log*
 playwright-report/
 test-results/
 antigravity-awesome-skills/
+test-screenshot*.png
+*.html
+!src/**/*.html
+
+# Legacy AI Studio / Vite files (no longer part of Next.js)
+server.ts
+inspect.ts
+metadata.json
+sfc-content.html
+afrc.png
+vite.config.ts
+.env.example
+src/App.tsx
+src/main.tsx
+src/index.css
+src/config.ts
+src/services/
+src/context/
+src/hooks/

@@ -5,6 +5,7 @@ import { captureHkex } from '@/actions/hkex';
 import type { CaptureResult } from '@/actions/hkex';
 import { CaptureButton } from '@/components/shared/CaptureButton';
 import { ProgressStepper } from '@/components/shared/ProgressStepper';
+import { CaptureSkeleton } from '@/components/shared/CaptureSkeleton';
 import { ScreenshotGallery } from '@/components/shared/ScreenshotGallery';
 
 interface HkexPanelProps {
@@ -13,42 +14,49 @@ interface HkexPanelProps {
 
 /**
  * HKEX Equities Capture Panel
- * Matches Stitch frame: "HKEX Equities Capture"
- * Uses useTransition for loading state (React 19 pattern)
+ *
+ * Flow:
+ *  1. User enters stock codes → clicks Capture
+ *  2. isPending = true → CaptureSkeleton + ProgressStepper visible
+ *  3. Server Action returns base64 screenshots → ScreenshotGallery renders
+ *
+ * ui-ux-pro-max: loading-states, ARIA live, keyboard-nav, touch-targets
  */
 export function HkexPanel({ isMockMode }: HkexPanelProps) {
   const [input, setInput] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [isPending, startTransition] = useTransition();
 
-  const handleCapture = () => {
-    const codes = input
-      .split(/[\s,]+/)
-      .map((c) => c.trim())
-      .filter(Boolean);
+  const stockCodes = input
+    .split(/[\s,]+/)
+    .map((c) => c.trim())
+    .filter(Boolean);
 
-    if (codes.length === 0) return;
-    if (codes.length > 10) {
+  const handleCapture = () => {
+    if (stockCodes.length === 0) return;
+    if (stockCodes.length > 10) {
       setError('Please limit your search to a maximum of 10 stock codes at a time.');
       return;
     }
 
     setError(null);
     setResults([]);
+    setPendingCount(stockCodes.length);
 
     startTransition(async () => {
       const newResults: CaptureResult[] = [];
-      for (const code of codes) {
+      for (const code of stockCodes) {
         const res = await captureHkex({ stockCode: code, isMockMode });
         if (res.success) {
           newResults.push(res.result);
+          setResults([...newResults]); // stream results in as they arrive
         } else {
           setError(`[${res.errorType ?? 'ERROR'}] ${res.error}`);
           break;
         }
       }
-      setResults(newResults);
     });
   };
 
@@ -100,6 +108,7 @@ export function HkexPanel({ isMockMode }: HkexPanelProps) {
             onClick={handleCapture}
           />
         </div>
+
         <p id="stockCodes-hint" className="label-meta">
           Codes: 0005 (HSBC), 0700 (Tencent), 9988 (Alibaba), 3690 (Meituan)
         </p>
@@ -112,13 +121,25 @@ export function HkexPanel({ isMockMode }: HkexPanelProps) {
         </div>
       )}
 
-      {/* Progress */}
+      {/* ── Loading state ─────────────────────────────────────────────────── */}
       {isPending && (
-        <ProgressStepper message="Processing…" step={1} totalSteps={4} />
+        <>
+          {/* Stage progress bar — auto-cycles through Playwright stages */}
+          <ProgressStepper tool="hkex" />
+
+          {/* Skeleton cards — one per queued capture so layout doesn't jump */}
+          <CaptureSkeleton count={pendingCount || stockCodes.length || 1} label="Capturing HKEX…" />
+        </>
       )}
 
-      {/* Results */}
-      <ScreenshotGallery results={results} prefix="hkex" onClear={() => setResults([])} />
+      {/* ── Results (streams in as each code completes) ───────────────────── */}
+      {!isPending && (
+        <ScreenshotGallery
+          results={results}
+          prefix="hkex"
+          onClear={() => { setResults([]); setPendingCount(0); }}
+        />
+      )}
     </div>
   );
 }

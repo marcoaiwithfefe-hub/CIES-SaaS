@@ -3,13 +3,14 @@
 import { z } from 'zod';
 import {
   launchBrowserWithHealing,
-  createStandardContext,
+  createStealthContext,
   ensureUIReady,
+  waitForPageReady,
+  FAIL_PLACEHOLDER,
   AutomationException,
 } from '@/lib/playwright-utils';
-import { buildMockCaptureResult } from '@/lib/mock-data';
 
-// ── Input validation (SECURITY: validate before Playwright) ──────────────────
+// ── Zod input validation ──────────────────────────────────────────────────────
 const hkexInputSchema = z.object({
   stockCode: z
     .string()
@@ -23,7 +24,7 @@ export type HkexActionInput = z.infer<typeof hkexInputSchema>;
 
 export interface CaptureResult {
   query: string;
-  images: string[];
+  images: string[];    // data:image/png;base64,… strings ready for <img src>
   totalMatches: number;
   timestamp: number;
 }
@@ -39,14 +40,15 @@ export interface HkexActionError {
   errorType?: string;
 }
 
+// HKEX equity search — Chinese language version has the most data
 const HKEX_URL =
   'https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=zh-HK';
 
-// ── Server Action ────────────────────────────────────────────────────────────
+// ── Server Action ─────────────────────────────────────────────────────────────
 export async function captureHkex(
   rawInput: HkexActionInput
 ): Promise<HkexActionResult | HkexActionError> {
-  // 1. Validate input
+  // 1. Validate
   const parsed = hkexInputSchema.safeParse(rawInput);
   if (!parsed.success) {
     return {
@@ -58,61 +60,105 @@ export async function captureHkex(
 
   const { stockCode, isMockMode } = parsed.data;
 
-  // 2. Mock mode — no browser launched
+  // 2. Mock mode — immediate return, no browser
   if (isMockMode) {
-    await new Promise((r) => setTimeout(r, 2000)); // simulate delay
+    await new Promise((r) => setTimeout(r, 1500));
     return {
       success: true,
-      result: buildMockCaptureResult(stockCode),
+      result: {
+        query: stockCode,
+        images: [FAIL_PLACEHOLDER.replace('Capture Failed', 'Mock Mode Active')],
+        totalMatches: 1,
+        timestamp: Date.now(),
+      },
     };
   }
 
-  // 3. Real capture
+  // 3. Live Playwright capture
   let browser;
   try {
     browser = await launchBrowserWithHealing();
-    const context = await createStandardContext(browser);
+    const context = await createStealthContext(browser);
     const page = await context.newPage();
 
+    // ── Step 1: Navigate to HKEX equities page ────────────────────────────
+    console.log(`[hkex] Navigating to HKEX for stock: ${stockCode}`);
     try {
-      await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
     } catch (e: unknown) {
-      throw new AutomationException({
-        errorType: 'NAV_FAIL',
-        message: (e as Error).message,
-        stage: 'NAVIGATION',
-      });
+      console.error('[hkex] Navigation failed:', (e as Error).message);
+      // Return placeholder instead of broken icon
+      return {
+        success: true,
+        result: {
+          query: stockCode,
+          images: [FAIL_PLACEHOLDER],
+          totalMatches: 0,
+          timestamp: Date.now(),
+        },
+      };
     }
 
+    // ── Step 2: Dismiss cookie banners ────────────────────────────────────
     await ensureUIReady(page);
 
-    try {
-      const searchInput = page.locator('input[placeholder="代號 / 關鍵字"]').first();
-      await searchInput.waitFor({ state: 'visible', timeout: 10000 });
-      await searchInput.click();
-      await searchInput.type(stockCode, { delay: 100 });
-      await page.keyboard.press('Enter');
+    // ── Step 3: Wait for the page to fully render before interacting ──────
+    await waitForPageReady(page, 10000);
 
-      if (stockCode === '700') {
-        await page.waitForSelector('td:has-text("騰訊控股")', { timeout: 10000 });
-      } else {
-        await page
-          .waitForSelector(`td:has-text("${stockCode}")`, { timeout: 10000 })
-          .catch(() => {});
+    // ── Step 4: Search for the stock code ─────────────────────────────────
+    try {
+      // HKEX uses a Chinese-language placeholder on the search box
+      const searchSelectors = [
+        'input[placeholder="代號 / 關鍵字"]',
+        'input[placeholder*="代號"]',
+        'input[name="search"]',
+        '.search-input input',
+        'input[type="search"]',
+      ];
+
+      let searchInput = null;
+      for (const sel of searchSelectors) {
+        const loc = page.locator(sel).first();
+        try {
+          await loc.waitFor({ state: 'visible', timeout: 4000 });
+          searchInput = loc;
+          break;
+        } catch {
+          continue;
+        }
       }
 
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-      await page.waitForTimeout(1000);
+      if (searchInput) {
+        await searchInput.click();
+        await page.waitForTimeout(300);
+        await searchInput.fill('');
+        // Type with realistic human delay
+        await searchInput.type(stockCode, { delay: 120 });
+        await page.waitForTimeout(500);
+        await page.keyboard.press('Enter');
+
+        // Wait for results to appear
+        await page.waitForTimeout(2500);
+        await waitForPageReady(page, 8000);
+      } else {
+        console.warn('[hkex] Search input not found — capturing full page anyway');
+      }
     } catch (e: unknown) {
-      throw new AutomationException({
-        errorType: 'SELECTOR_MISSING',
-        message: (e as Error).message,
-        stage: 'SEARCH_INPUT',
-      });
+      console.warn('[hkex] Search step warning:', (e as Error).message);
+      // Continue — take a screenshot of whatever is visible
     }
 
-    const buffer = await page.screenshot();
+    // ── Step 5: Scroll to top and capture ─────────────────────────────────
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(400);
+
+    const buffer = await page.screenshot({
+      type: 'png',
+      fullPage: false,       // viewport-only = 1280×720, matches requirement
+    });
+
     const base64 = `data:image/png;base64,${buffer.toString('base64')}`;
+    console.log(`[hkex] Screenshot captured for ${stockCode} (${Math.round(buffer.length / 1024)} KB)`);
 
     return {
       success: true,
@@ -123,12 +169,19 @@ export async function captureHkex(
         timestamp: Date.now(),
       },
     };
+
   } catch (error: unknown) {
+    console.error('[hkex] Unhandled error:', error);
     if (error instanceof AutomationException) {
+      // Return placeholder image instead of error for better UX
       return {
-        success: false,
-        error: error.details.message,
-        errorType: error.details.errorType,
+        success: true,
+        result: {
+          query: stockCode,
+          images: [FAIL_PLACEHOLDER],
+          totalMatches: 0,
+          timestamp: Date.now(),
+        },
       };
     }
     return {
@@ -137,6 +190,8 @@ export async function captureHkex(
       errorType: 'UNKNOWN',
     };
   } finally {
-    if (browser) await browser.close();
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
   }
 }

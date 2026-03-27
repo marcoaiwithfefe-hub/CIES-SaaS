@@ -3,11 +3,12 @@
 import { z } from 'zod';
 import {
   launchBrowserWithHealing,
-  createStandardContext,
+  createStealthContext,
   ensureUIReady,
+  waitForPageReady,
+  FAIL_PLACEHOLDER,
   AutomationException,
 } from '@/lib/playwright-utils';
-import { buildMockCaptureResult } from '@/lib/mock-data';
 import type { CaptureResult } from './hkex';
 
 const sfcInputSchema = z.object({
@@ -26,7 +27,6 @@ export interface SfcActionResult {
   success: true;
   results: CaptureResult[];
 }
-
 export interface SfcActionError {
   success: false;
   error: string;
@@ -51,48 +51,72 @@ export async function captureSfc(
   const { fundNames, isMockMode } = parsed.data;
 
   if (isMockMode) {
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 1500));
     return {
       success: true,
-      results: fundNames.map((name) => buildMockCaptureResult(name)),
+      results: fundNames.map((name) => ({
+        query: name,
+        images: [FAIL_PLACEHOLDER],
+        totalMatches: 0,
+        timestamp: Date.now(),
+      })),
     };
   }
 
   let browser;
   try {
     browser = await launchBrowserWithHealing();
-    const context = await createStandardContext(browser);
+    const context = await createStealthContext(browser);
     const page = await context.newPage();
 
+    // ── Step 1: Navigate to SFC CIES page ────────────────────────────────
+    console.log('[sfc] Navigating to SFC CIES register...');
     try {
-      await page.goto(SFC_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(SFC_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
     } catch (e: unknown) {
-      throw new AutomationException({ errorType: 'NAV_FAIL', message: (e as Error).message, stage: 'NAVIGATION' });
+      console.error('[sfc] Navigation failed:', (e as Error).message);
+      return {
+        success: true,
+        results: fundNames.map((name) => ({
+          query: name,
+          images: [FAIL_PLACEHOLDER],
+          totalMatches: 0,
+          timestamp: Date.now(),
+        })),
+      };
     }
 
     await ensureUIReady(page);
+    await waitForPageReady(page, 12000);
 
-    // Wait for table and expand all
+    // ── Step 2: Try to expand all accordion sections ──────────────────────
     try {
-      await page.waitForSelector('.table-container table', { timeout: 15000 });
-    } catch {
-      console.warn('[sfc-action] table not found, proceeding');
-    }
-
-    try {
-      const expandBtn = page.locator('.accordin_expand').first();
-      if (await expandBtn.isVisible({ timeout: 5000 })) {
-        await expandBtn.click({ force: true });
-        await page.waitForTimeout(1500);
+      const expandSelectors = [
+        '.accordin_expand',
+        'button:has-text("Expand All")',
+        '[aria-label="Expand All"]',
+      ];
+      for (const sel of expandSelectors) {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 2000 })) {
+          await btn.click({ force: true });
+          await page.waitForTimeout(1500);
+          break;
+        }
       }
     } catch {
-      console.warn('[sfc-action] Expand All failed');
+      console.warn('[sfc] Expand All not found — table may already be expanded');
     }
 
+    await waitForPageReady(page, 5000);
+
+    // ── Step 3: Capture matching rows per fund name ───────────────────────
     const captureResults: CaptureResult[] = [];
 
     for (const fundName of fundNames) {
       if (!fundName.trim()) continue;
+      console.log(`[sfc] Searching for fund: "${fundName}"`);
+
       try {
         const keywords = fundName.toLowerCase().trim().split(/\s+/);
         let fundRows = page.locator('tr');
@@ -109,29 +133,54 @@ export async function captureSfc(
           const limit = Math.min(count, 5);
           for (let i = 0; i < limit; i++) {
             const row = fundRows.nth(i);
-            await row.scrollIntoViewIfNeeded();
-            const buf = await row.screenshot();
-            screenshots.push(`data:image/png;base64,${buf.toString('base64')}`);
+            try {
+              await row.scrollIntoViewIfNeeded();
+              await page.waitForTimeout(200);
+              const buf = await row.screenshot({ type: 'png' });
+              screenshots.push(`data:image/png;base64,${buf.toString('base64')}`);
+            } catch (rowErr) {
+              console.warn(`[sfc] Row ${i} screenshot failed:`, (rowErr as Error).message);
+            }
           }
         }
 
-        captureResults.push({ query: fundName, images: screenshots, totalMatches: count, timestamp: Date.now() });
+        // If no row matches, take a full viewport screenshot of the page
+        if (screenshots.length === 0) {
+          await page.evaluate(() => window.scrollTo(0, 0));
+          const buf = await page.screenshot({ type: 'png', fullPage: false });
+          screenshots.push(`data:image/png;base64,${buf.toString('base64')}`);
+        }
+
+        captureResults.push({
+          query: fundName,
+          images: screenshots,
+          totalMatches: count,
+          timestamp: Date.now(),
+        });
       } catch (e: unknown) {
-        throw new AutomationException({
-          errorType: 'SELECTOR_MISSING',
-          message: `Fund "${fundName}": ${(e as Error).message}`,
-          stage: 'PROCESSING_RESULTS',
+        console.error(`[sfc] Error for fund "${fundName}":`, (e as Error).message);
+        captureResults.push({
+          query: fundName,
+          images: [FAIL_PLACEHOLDER],
+          totalMatches: 0,
+          timestamp: Date.now(),
         });
       }
     }
 
     return { success: true, results: captureResults };
+
   } catch (error: unknown) {
+    console.error('[sfc] Unhandled error:', error);
     if (error instanceof AutomationException) {
       return { success: false, error: error.details.message, errorType: error.details.errorType };
     }
-    return { success: false, error: (error as Error).message ?? 'Unknown error', errorType: 'UNKNOWN' };
+    return {
+      success: false,
+      error: (error as Error).message ?? 'Unknown error',
+      errorType: 'UNKNOWN',
+    };
   } finally {
-    if (browser) await browser.close();
+    if (browser) await browser.close().catch(() => {});
   }
 }

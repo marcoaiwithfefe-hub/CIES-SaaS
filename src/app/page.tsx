@@ -1,22 +1,21 @@
 import type { Metadata } from 'next';
-import { DashboardShell } from '@/components/layout/DashboardShell';
-import { HkexPanel } from '@/components/panels/HkexPanel';
+import { ToolWorkspace } from '@/components/layout/ToolWorkspace';
 
 export const metadata: Metadata = {
-  title: 'HKEX Tool — CIES Auditor',
-  description: 'Capture HKEX regulatory compliance data for listed equities.',
+  title: 'CIES Internal Regulatory Audit System',
+  description:
+    'Internal compliance intelligence terminal for HKEX, SFC, and AFRC regulatory data capture and audit.',
 };
 
 /**
- * HKEX capture page — Server Component.
- * Mock mode is controlled by environment; panels are Client Components.
+ * Single-page workspace — all tool panels live here.
+ *
+ * Navigation between tools is handled client-side via ToolWorkspace
+ * (display:none toggling) so that each panel's state (search inputs,
+ * results, loading) is preserved across tab switches.
  */
-export default function HkexPage() {
+export default function HomePage() {
   const isMockMode = process.env.MOCK_MODE === 'true';
 
-  return (
-    <DashboardShell>
-      <HkexPanel isMockMode={isMockMode} />
-    </DashboardShell>
-  );
+  return <ToolWorkspace isMockMode={isMockMode} />;
 }
