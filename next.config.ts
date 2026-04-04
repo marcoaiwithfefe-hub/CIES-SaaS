@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   // Playwright must run in Node.js runtime, not edge
-  serverExternalPackages: ['playwright', 'playwright-core'],
+  serverExternalPackages: ['playwright', 'playwright-core', '@sparticuz/chromium'],
 
   // Security headers
   async headers() {

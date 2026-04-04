@@ -1,5 +1,4 @@
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
-import { execSync } from 'child_process';
+import { Browser, BrowserContext, Page } from 'playwright-core';
 
 export interface AutomationError {
   errorType: 'TIMEOUT' | 'SELECTOR_MISSING' | 'NAV_FAIL' | 'ENV_FAIL' | 'UNKNOWN';
@@ -33,38 +32,50 @@ const FAIL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="7
 
 export const FAIL_PLACEHOLDER = `data:image/svg+xml;base64,${Buffer.from(FAIL_SVG).toString('base64')}`;
 
-// ── Browser launch (self-healing Chromium install) ────────────────────────────
+const LOCAL_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-blink-features=AutomationControlled',
+  '--disable-infobars',
+  '--window-size=1280,720',
+];
+
+// ── Browser launch ────────────────────────────────────────────────────────────
+// On Vercel/Lambda: uses @sparticuz/chromium (serverless-compatible binary).
+// Locally: dynamically imports playwright (devDependency) which bundles Chromium.
 export async function launchBrowserWithHealing(): Promise<Browser> {
-  try {
-    return await chromium.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-infobars',
-        '--window-size=1280,720',
-      ],
-    });
-  } catch (error: unknown) {
-    const err = error as Error;
-    if (err.message?.includes("Executable doesn't exist")) {
-      console.log('[playwright-utils] Chromium missing — auto-installing...');
-      try {
-        execSync('npx playwright install chromium --with-deps', { stdio: 'inherit' });
-        return await chromium.launch({ headless: true });
-      } catch (installError: unknown) {
-        throw new AutomationException({
-          errorType: 'ENV_FAIL',
-          message: `Failed to install Chromium: ${(installError as Error).message}`,
-          stage: 'BROWSER_LAUNCH',
-        });
-      }
+  const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+  if (isServerless) {
+    console.log('[playwright-utils] Serverless env — using @sparticuz/chromium');
+    try {
+      const [{ default: sparticuz }, { chromium }] = await Promise.all([
+        import('@sparticuz/chromium'),
+        import('playwright-core'),
+      ]);
+      return await chromium.launch({
+        args: sparticuz.args,
+        executablePath: await sparticuz.executablePath(),
+        headless: true,
+      });
+    } catch (error: unknown) {
+      throw new AutomationException({
+        errorType: 'ENV_FAIL',
+        message: `Serverless Chromium launch failed: ${(error as Error).message}`,
+        stage: 'BROWSER_LAUNCH',
+      });
     }
+  }
+
+  // Local dev — playwright (devDependency) bundles its own Chromium
+  try {
+    const { chromium } = await import('playwright');
+    return await chromium.launch({ headless: true, args: LOCAL_ARGS });
+  } catch (error: unknown) {
     throw new AutomationException({
       errorType: 'ENV_FAIL',
-      message: `Failed to launch browser: ${err.message}`,
+      message: `Failed to launch browser: ${(error as Error).message}. Run: npx playwright install chromium`,
       stage: 'BROWSER_LAUNCH',
     });
   }

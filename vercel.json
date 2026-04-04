@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "functions": {
+    "src/app/**": {
+      "memory": 3009,
+      "maxDuration": 60
+    }
+  }
+}
