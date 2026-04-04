@@ -5,6 +5,7 @@ import {
   launchBrowserWithHealing,
   createStandardContext,
   ensureUIReady,
+  waitForPageReady,
   robustClick,
   AutomationException,
 } from '@/lib/playwright-utils';
@@ -60,19 +61,20 @@ export async function captureAfrcFirm(
     }
 
     await ensureUIReady(page);
+    await waitForPageReady(page, 15000);
 
     try {
       if (searchType === 'enName') {
         const input = page.locator('#vNAME').first();
-        await input.waitFor({ state: 'visible', timeout: 5000 });
+        await input.waitFor({ state: 'visible', timeout: 15000 });
         await input.fill(searchValue);
       } else if (searchType === 'chName') {
         const input = page.locator('#vCHINESENAME').first();
-        await input.waitFor({ state: 'visible', timeout: 5000 });
+        await input.waitFor({ state: 'visible', timeout: 15000 });
         await input.fill(searchValue);
       } else {
         const input = page.locator('#vREGNO').first();
-        await input.waitFor({ state: 'visible', timeout: 5000 });
+        await input.waitFor({ state: 'visible', timeout: 15000 });
         await input.fill(searchValue);
       }
     } catch (e: unknown) {
