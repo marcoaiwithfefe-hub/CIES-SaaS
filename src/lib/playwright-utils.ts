@@ -1,4 +1,7 @@
 import { Browser, BrowserContext, Page } from 'playwright-core';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
 
 export interface AutomationError {
   errorType: 'TIMEOUT' | 'SELECTOR_MISSING' | 'NAV_FAIL' | 'ENV_FAIL' | 'UNKNOWN';
@@ -41,6 +44,60 @@ const LOCAL_ARGS = [
   '--window-size=1536,864',
 ];
 
+// ── CJK font loading (Graceful Degradation) ─────────────────────────────────
+const CJK_FONT_URL =
+  'https://raw.githack.com/nicholasgasior/gcp-fonts/master/fonts/noto-sans-cjk-hk/NotoSansCJKhk-Regular.otf';
+const FONT_DIR = '/tmp/fonts';
+const FONT_PATH = path.join(FONT_DIR, 'NotoSansCJKhk-Regular.otf');
+const FONTCONFIG_PATH = path.join(FONT_DIR, 'fonts.conf');
+
+function downloadFile(url: string, dest: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    https.get(url, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        const redirect = res.headers.location;
+        if (!redirect) return reject(new Error('Redirect with no location'));
+        return downloadFile(redirect, dest).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+      }
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve()));
+      file.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+async function loadCJKFont(chromiumModule: Record<string, unknown>): Promise<void> {
+  // Method 1: Use built-in font() if available
+  if (typeof chromiumModule.font === 'function') {
+    console.log('[playwright-utils] Loading CJK font via chromium.font()');
+    await chromiumModule.font(CJK_FONT_URL);
+    return;
+  }
+
+  // Method 2: Manual download to /tmp/fonts/
+  if (fs.existsSync(FONT_PATH)) {
+    console.log('[playwright-utils] CJK font already cached at', FONT_PATH);
+    return;
+  }
+
+  console.log('[playwright-utils] Downloading CJK font manually to /tmp/fonts/');
+  fs.mkdirSync(FONT_DIR, { recursive: true });
+  await downloadFile(CJK_FONT_URL, FONT_PATH);
+
+  // Write fontconfig so Chromium discovers the font
+  const fontsConf = `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig><dir>/tmp/fonts</dir></fontconfig>`;
+  fs.writeFileSync(FONTCONFIG_PATH, fontsConf);
+  process.env.FONTCONFIG_PATH = FONT_DIR;
+
+  console.log('[playwright-utils] CJK font installed at', FONT_PATH);
+}
+
 // ── Browser launch ────────────────────────────────────────────────────────────
 // On Vercel/Lambda: uses @sparticuz/chromium (serverless-compatible binary).
 // Locally: dynamically imports playwright (devDependency) which bundles Chromium.
@@ -54,11 +111,7 @@ export async function launchBrowserWithHealing(): Promise<Browser> {
         import('@sparticuz/chromium'),
         import('playwright-core'),
       ]);
-      // Load CJK fonts so Chinese characters render correctly
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (sparticuz as any).font(
-        'https://raw.githack.com/nicholasgasior/gcp-fonts/master/fonts/noto-sans-cjk-hk/NotoSansCJKhk-Regular.otf'
-      );
+      await loadCJKFont(sparticuz as unknown as Record<string, unknown>);
       return await chromium.launch({
         args: sparticuz.args,
         executablePath: await sparticuz.executablePath(),
