@@ -102,6 +102,28 @@ export async function captureHkex(
     // ── Step 2: Dismiss cookie banners ────────────────────────────────────
     await ensureUIReady(page);
 
+    // ── Step 2b: Dismiss HKEX-specific notice/disclaimer banners ─────────
+    const hkexCloseSelectors = [
+      '.btn-close',                          // Bootstrap close button
+      'button[aria-label="Close"]',
+      '.modal .close',
+      '.popup-close',
+      '#onetrust-close-btn-container button',
+      '.announcement-close',
+      'a.close',
+    ];
+    for (const sel of hkexCloseSelectors) {
+      try {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 2000 })) {
+          await btn.click({ force: true, timeout: 2000 });
+          await page.waitForTimeout(500);
+        }
+      } catch {
+        // Not found — try next
+      }
+    }
+
     // ── Step 3: Wait for the page to fully render before interacting ──────
     await waitForPageReady(page, 10000);
 

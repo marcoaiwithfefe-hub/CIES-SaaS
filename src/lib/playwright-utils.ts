@@ -18,16 +18,16 @@ export class AutomationException extends Error {
 export const STEALTH_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-export const STANDARD_VIEWPORT = { width: 1280, height: 720 };
+export const STANDARD_VIEWPORT = { width: 1536, height: 864 };
 
 // ── "Capture Failed" SVG placeholder ─────────────────────────────────────────
 // Returned instead of a broken icon when Playwright fails to load the page
-const FAIL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <rect width="1280" height="720" fill="#131b2e"/>
-  <rect x="40" y="40" width="1200" height="640" rx="12" fill="#171f33" stroke="#3e484f" stroke-width="1"/>
-  <text x="640" y="320" font-family="Inter,sans-serif" font-size="48" font-weight="700" fill="#87929a" text-anchor="middle">Capture Failed</text>
-  <text x="640" y="380" font-family="Inter,sans-serif" font-size="24" fill="#3e484f" text-anchor="middle">Browser could not load the regulatory page</text>
-  <text x="640" y="420" font-family="Inter,sans-serif" font-size="18" fill="#3e484f" text-anchor="middle">Check network access and try again</text>
+const FAIL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="864" viewBox="0 0 1536 864">
+  <rect width="1536" height="864" fill="#131b2e"/>
+  <rect x="40" y="40" width="1456" height="784" rx="12" fill="#171f33" stroke="#3e484f" stroke-width="1"/>
+  <text x="768" y="390" font-family="Inter,sans-serif" font-size="48" font-weight="700" fill="#87929a" text-anchor="middle">Capture Failed</text>
+  <text x="768" y="450" font-family="Inter,sans-serif" font-size="24" fill="#3e484f" text-anchor="middle">Browser could not load the regulatory page</text>
+  <text x="768" y="490" font-family="Inter,sans-serif" font-size="18" fill="#3e484f" text-anchor="middle">Check network access and try again</text>
 </svg>`;
 
 export const FAIL_PLACEHOLDER = `data:image/svg+xml;base64,${Buffer.from(FAIL_SVG).toString('base64')}`;
@@ -38,7 +38,7 @@ const LOCAL_ARGS = [
   '--disable-dev-shm-usage',
   '--disable-blink-features=AutomationControlled',
   '--disable-infobars',
-  '--window-size=1280,720',
+  '--window-size=1536,864',
 ];
 
 // ── Browser launch ────────────────────────────────────────────────────────────
@@ -54,6 +54,11 @@ export async function launchBrowserWithHealing(): Promise<Browser> {
         import('@sparticuz/chromium'),
         import('playwright-core'),
       ]);
+      // Load CJK fonts so Chinese characters render correctly
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (sparticuz as any).font(
+        'https://raw.githack.com/nicholasgasior/gcp-fonts/master/fonts/noto-sans-cjk-hk/NotoSansCJKhk-Regular.otf'
+      );
       return await chromium.launch({
         args: sparticuz.args,
         executablePath: await sparticuz.executablePath(),
