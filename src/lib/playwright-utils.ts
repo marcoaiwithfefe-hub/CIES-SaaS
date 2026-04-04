@@ -46,9 +46,9 @@ const LOCAL_ARGS = [
 
 // ── CJK font loading (Graceful Degradation) ─────────────────────────────────
 const CJK_FONT_URL =
-  'https://raw.githack.com/nicholasgasior/gcp-fonts/master/fonts/noto-sans-cjk-hk/NotoSansCJKhk-Regular.otf';
+  'https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf';
 const FONT_DIR = '/tmp/fonts';
-const FONT_PATH = path.join(FONT_DIR, 'NotoSansCJKhk-Regular.otf');
+const FONT_PATH = path.join(FONT_DIR, 'NotoSansCJKsc-Regular.otf');
 const FONTCONFIG_PATH = path.join(FONT_DIR, 'fonts.conf');
 
 function downloadFile(url: string, dest: string): Promise<void> {
@@ -111,7 +111,12 @@ export async function launchBrowserWithHealing(): Promise<Browser> {
         import('@sparticuz/chromium'),
         import('playwright-core'),
       ]);
-      await loadCJKFont(sparticuz as unknown as Record<string, unknown>);
+      // Graceful Degradation: font failure should not block browser launch
+      try {
+        await loadCJKFont(sparticuz as unknown as Record<string, unknown>);
+      } catch (fontError: unknown) {
+        console.warn('[playwright-utils] CJK font loading failed (non-fatal):', (fontError as Error).message);
+      }
       return await chromium.launch({
         args: sparticuz.args,
         executablePath: await sparticuz.executablePath(),
