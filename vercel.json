@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "functions": {
     "src/app/**": {
-      "memory": 3009,
+      "memory": 2048,
       "maxDuration": 60
     }
   }
