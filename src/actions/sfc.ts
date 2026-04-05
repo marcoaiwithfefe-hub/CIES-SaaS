@@ -72,7 +72,7 @@ export async function captureSfc(
     // ── Step 1: Navigate to SFC CIES page ────────────────────────────────
     console.log('[sfc] Navigating to SFC CIES register...');
     try {
-      await page.goto(SFC_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.goto(SFC_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
     } catch (e: unknown) {
       console.error('[sfc] Navigation failed:', (e as Error).message);
       return {
@@ -87,7 +87,7 @@ export async function captureSfc(
     }
 
     await ensureUIReady(page);
-    await waitForPageReady(page, 12000);
+    await waitForPageReady(page, 6000);
 
     // ── Step 2: Try to expand all accordion sections ──────────────────────
     try {
@@ -100,7 +100,7 @@ export async function captureSfc(
         const btn = page.locator(sel).first();
         if (await btn.isVisible({ timeout: 2000 })) {
           await btn.click({ force: true });
-          await page.waitForTimeout(1500);
+          await page.waitForTimeout(600).catch(() => {});
           break;
         }
       }
@@ -108,7 +108,7 @@ export async function captureSfc(
       console.warn('[sfc] Expand All not found — table may already be expanded');
     }
 
-    await waitForPageReady(page, 5000);
+    await waitForPageReady(page, 2000);
 
     // ── Step 3: Capture matching rows per fund name ───────────────────────
     const captureResults: CaptureResult[] = [];
@@ -135,7 +135,7 @@ export async function captureSfc(
             const row = fundRows.nth(i);
             try {
               await row.scrollIntoViewIfNeeded();
-              await page.waitForTimeout(200);
+              await page.waitForTimeout(80).catch(() => {});
               const buf = await row.screenshot({ type: 'png' });
               screenshots.push(`data:image/png;base64,${buf.toString('base64')}`);
             } catch (rowErr) {

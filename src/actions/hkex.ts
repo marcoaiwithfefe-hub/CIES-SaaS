@@ -84,7 +84,7 @@ export async function captureHkex(
     // ── Step 1: Navigate to HKEX equities page ────────────────────────────
     console.log(`[hkex] Navigating to HKEX for stock: ${stockCode}`);
     try {
-      await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
     } catch (e: unknown) {
       console.error('[hkex] Navigation failed:', (e as Error).message);
       // Return placeholder instead of broken icon
@@ -115,9 +115,9 @@ export async function captureHkex(
     for (const sel of hkexCloseSelectors) {
       try {
         const btn = page.locator(sel).first();
-        if (await btn.isVisible({ timeout: 2000 })) {
-          await btn.click({ force: true, timeout: 2000 });
-          await page.waitForTimeout(500);
+        if (await btn.isVisible({ timeout: 800 })) {
+          await btn.click({ force: true, timeout: 800 });
+          await page.waitForTimeout(300).catch(() => {});
         }
       } catch {
         // Not found — try next
@@ -125,7 +125,7 @@ export async function captureHkex(
     }
 
     // ── Step 3: Wait for the page to fully render before interacting ──────
-    await waitForPageReady(page, 10000);
+    await waitForPageReady(page, 6000);
 
     // ── Step 4: Search for the stock code ─────────────────────────────────
     try {
@@ -142,7 +142,7 @@ export async function captureHkex(
       for (const sel of searchSelectors) {
         const loc = page.locator(sel).first();
         try {
-          await loc.waitFor({ state: 'visible', timeout: 4000 });
+          await loc.waitFor({ state: 'visible', timeout: 2500 });
           searchInput = loc;
           break;
         } catch {
@@ -152,16 +152,16 @@ export async function captureHkex(
 
       if (searchInput) {
         await searchInput.click();
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(150).catch(() => {});
         await searchInput.fill('');
         // Type with realistic human delay
-        await searchInput.type(stockCode, { delay: 120 });
-        await page.waitForTimeout(500);
+        await searchInput.type(stockCode, { delay: 80 });
+        await page.waitForTimeout(200).catch(() => {});
         await page.keyboard.press('Enter');
 
         // Wait for results to appear
-        await page.waitForTimeout(2500);
-        await waitForPageReady(page, 8000);
+        await page.waitForTimeout(1200).catch(() => {});
+        await waitForPageReady(page, 4000);
       } else {
         console.warn('[hkex] Search input not found — capturing full page anyway');
       }
@@ -172,7 +172,7 @@ export async function captureHkex(
 
     // ── Step 5: Scroll to top and capture ─────────────────────────────────
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(150).catch(() => {});
 
     const buffer = await page.screenshot({
       type: 'png',
