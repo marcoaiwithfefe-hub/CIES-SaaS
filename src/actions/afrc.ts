@@ -81,7 +81,16 @@ export async function captureAfrc(
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
 
     await page.evaluate(() => window.scrollTo(0, 0));
-    const buf = await page.screenshot({ fullPage: true });
+
+    // fullPage screenshots can exceed Chrome's max texture size on long result pages,
+    // causing a CDP Protocol error. Fall back to viewport-only screenshot.
+    let buf: Buffer;
+    try {
+      buf = await page.screenshot({ fullPage: true });
+    } catch {
+      console.warn('[afrc] fullPage screenshot failed, falling back to viewport screenshot');
+      buf = await page.screenshot({ fullPage: false });
+    }
 
     return {
       success: true,

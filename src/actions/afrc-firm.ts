@@ -85,7 +85,14 @@ export async function captureAfrcFirm(
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
 
     await page.evaluate(() => window.scrollTo(0, 0));
-    const buf = await page.screenshot({ fullPage: true });
+
+    let buf: Buffer;
+    try {
+      buf = await page.screenshot({ fullPage: true });
+    } catch {
+      console.warn('[afrc-firm] fullPage screenshot failed, falling back to viewport screenshot');
+      buf = await page.screenshot({ fullPage: false });
+    }
 
     return {
       success: true,
