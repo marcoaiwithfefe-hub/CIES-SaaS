@@ -88,8 +88,15 @@ export async function captureAfrc(
     try {
       buf = await page.screenshot({ fullPage: true });
     } catch {
-      console.warn('[afrc] fullPage screenshot failed, falling back to viewport screenshot');
-      buf = await page.screenshot({ fullPage: false });
+      console.warn('[afrc] fullPage screenshot failed, falling back to clipped screenshot');
+      try {
+        const scrollHeight = await page.evaluate(() => document.body.scrollHeight);
+        const vpWidth = page.viewportSize()?.width ?? 1536;
+        const clipHeight = Math.min(scrollHeight, 4096);
+        buf = await page.screenshot({ clip: { x: 0, y: 0, width: vpWidth, height: clipHeight } });
+      } catch {
+        buf = await page.screenshot({ fullPage: false });
+      }
     }
 
     return {
