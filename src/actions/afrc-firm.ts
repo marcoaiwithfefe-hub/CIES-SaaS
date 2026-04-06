@@ -65,17 +65,17 @@ export async function captureAfrcFirm(
 
     try {
       if (searchType === 'enName') {
-        const input = page.locator('#vNAME').first();
-        await input.waitFor({ state: 'visible', timeout: 15000 });
-        await input.fill(searchValue);
+        const input = page.locator('#vNAME').or(page.locator('input[name="vNAME"]')).first();
+        await input.waitFor({ state: 'attached', timeout: 15000 });
+        await input.fill(searchValue, { force: true });
       } else if (searchType === 'chName') {
-        const input = page.locator('#vCHINESENAME').first();
-        await input.waitFor({ state: 'visible', timeout: 15000 });
-        await input.fill(searchValue);
+        const input = page.locator('#vCHINESENAME').or(page.locator('input[name="vCHINESENAME"]')).first();
+        await input.waitFor({ state: 'attached', timeout: 15000 });
+        await input.fill(searchValue, { force: true });
       } else {
-        const input = page.locator('#vREGNO').first();
-        await input.waitFor({ state: 'visible', timeout: 15000 });
-        await input.fill(searchValue);
+        const input = page.locator('#vREGNO').or(page.locator('input[name="vREGNO"]')).first();
+        await input.waitFor({ state: 'attached', timeout: 15000 });
+        await input.fill(searchValue, { force: true });
       }
     } catch (e: unknown) {
       throw new AutomationException({ errorType: 'SELECTOR_MISSING', message: (e as Error).message, stage: 'SEARCH_INPUT' });
