@@ -2,6 +2,7 @@ import { Browser, BrowserContext, Page } from 'playwright-core';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 export interface AutomationError {
   errorType: 'TIMEOUT' | 'SELECTOR_MISSING' | 'NAV_FAIL' | 'ENV_FAIL' | 'UNKNOWN';
@@ -106,6 +107,20 @@ export async function launchBrowserWithHealing(): Promise<Browser> {
 
   if (isServerless) {
     console.log('[playwright-utils] Serverless env — using @sparticuz/chromium');
+
+    // Kill any lingering Chromium process from a previous warm-container invocation.
+    // sparticuz uses --single-process so the browser is a single OS process that can
+    // take 1-3s to fully exit after browser.close(). A rapid second request on the
+    // same warm container would launch a second Chromium before the first fully dies,
+    // causing OOM / "browserContext.newPage: Target page, context or browser has been closed".
+    try {
+      execSync('pkill -f chromium', { timeout: 2000 });
+      await new Promise((r) => setTimeout(r, 500)); // let it fully exit
+      console.log('[playwright-utils] Killed lingering Chromium process');
+    } catch {
+      // pkill exits with code 1 when no process found — that's fine, means clean state
+    }
+
     try {
       const [{ default: sparticuz }, { chromium }] = await Promise.all([
         import('@sparticuz/chromium'),
