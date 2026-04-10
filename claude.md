@@ -6,9 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Is This?
 
-**CIES Internal Check — Regulatory Auditor** is an internal compliance intelligence tool for the Hong Kong financial market. It automates data capture and screenshot auditing from **four regulatory sources** using server-side Playwright browser automation.
-
-This is an **internal tool** (not public-facing), built for CIES compliance staff to quickly verify equity listings, fund eligibility, and CPA registrations against live regulatory websites.
+**CIES Internal Check — Regulatory Auditor** is an internal compliance tool for the Hong Kong financial market. It automates screenshot capture from four live regulatory websites using server-side Playwright. Staff use it to verify equity listings, fund eligibility, and CPA registrations.
 
 ---
 
@@ -18,11 +16,11 @@ This is an **internal tool** (not public-facing), built for CIES compliance staf
 npm run dev          # Start dev server → http://localhost:3000
 npm run build        # Production build
 npm run lint         # ESLint
-npm run type-check   # tsc --noEmit (no emit, type errors only)
-npx playwright install chromium   # Install Chromium for live captures
+npm run type-check   # tsc --noEmit
+npx playwright install chromium   # Required for local live captures
 ```
 
-No test runner is configured. The only test script is `test-playwright.ts` (manual, run with `npx ts-node test-playwright.ts`).
+No test runner is configured. `test-playwright.ts` exists for manual Playwright testing via `npx ts-node test-playwright.ts`.
 
 ---
 
@@ -30,46 +28,46 @@ No test runner is configured. The only test script is `test-playwright.ts` (manu
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Next.js 15.5 (App Router) |
+| Framework | Next.js 15 (App Router) |
 | Language | TypeScript 5.8 |
 | UI | React 19, Tailwind CSS v4 |
-| Browser Automation | Playwright (headless Chromium, server-side only) |
-| Env Validation | Zod schema in `src/env.ts` |
+| Browser Automation | Playwright — server-side only, Node.js runtime |
+| Serverless Chromium | `@sparticuz/chromium@143` + `playwright-core@1.57` |
+| Env Validation | Zod in `src/env.ts` |
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 src/
-├── app/                    # Next.js App Router pages
-│   ├── layout.tsx          # Root layout (fonts, metadata, security headers)
-│   ├── page.tsx            # Home — renders ToolWorkspace
-│   └── globals.css         # Global styles + design tokens
-│
+├── app/                    # Next.js App Router
+│   ├── layout.tsx          # Root layout, fonts, security headers
+│   └── page.tsx            # Home — renders ToolWorkspace
 ├── components/
 │   ├── layout/
-│   │   ├── Sidebar.tsx        # Left sidebar with tool navigation + status
-│   │   └── ToolWorkspace.tsx  # Main workspace — keep-alive panel switcher
-│   ├── panels/                # Tool-specific panel components
-│   │   ├── HkexPanel.tsx
-│   │   ├── SfcPanel.tsx
-│   │   ├── AfrcPanel.tsx
-│   │   └── AfrcFirmPanel.tsx
-│   └── shared/                # Reusable UI components
-│
-├── actions/                # Next.js Server Actions (Playwright automation)
-│   ├── hkex.ts             # HKEX equities capture
-│   ├── sfc.ts              # SFC CIES fund list
-│   ├── afrc.ts             # AFRC individual CPA register
-│   └── afrc-firm.ts        # AFRC firm CPA register
-│
-├── lib/
-│   ├── playwright-utils.ts  # Browser launch, stealth context, anti-bot helpers
-│   └── mock-data.ts         # Mock data for development without Playwright
-│
-└── env.ts                  # Zod-validated server environment variables
+│   │   ├── Sidebar.tsx        # Tool navigation
+│   │   └── ToolWorkspace.tsx  # Keep-alive panel switcher (see below)
+│   ├── panels/                # One panel per tool
+│   └── shared/                # CaptureButton, ScreenshotGallery, etc.
+├── actions/                # Next.js Server Actions — all Playwright code lives here
+│   ├── hkex.ts
+│   ├── sfc.ts
+│   ├── afrc.ts
+│   └── afrc-firm.ts
+└── lib/
+    ├── playwright-utils.ts  # Browser launch, stealth context, robustClick, FAIL_PLACEHOLDER
+    └── mock-data.ts
 ```
+
+### Keep-Alive Panel Switching
+All 4 tool panels are **always mounted**. Only the active one has `display:block`. This preserves state (inputs, results, loading) across tab switches. **Do not convert to conditional rendering.**
+
+### Server Action Pattern
+Each action follows: validate with Zod → mock-mode shortcut → `launchBrowserWithHealing()` → `createStealthContext()` → navigate → interact → screenshot → `browser.close()` in `finally`. Errors surface as `{ success: false, error, errorType }` — never throw to the client.
+
+### Screenshot Strategy (AFRC tools)
+Primary: `page.screenshot({ fullPage: true })`. If that throws (Chrome texture limit exceeded on tall pages), fall back to measuring `document.body.scrollHeight` and using `clip: { x:0, y:0, width, height: min(scrollHeight, 4096) }`. Only use bare `fullPage: false` as last resort.
 
 ---
 
@@ -77,67 +75,96 @@ src/
 
 ### 1. HKEX — Equities Capture
 - **URL:** `https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=zh-HK`
-- **Input:** Stock code (e.g. `0005`, `0700`)
-- **Action:** `captureHkex()` in `src/actions/hkex.ts`
-- **Flow:** Navigate → dismiss cookies → search stock code → screenshot viewport
+- **Input:** Stock code (`0005`, `0700`, etc.)
+- **Flow:** Navigate → dismiss cookie/notice banners → find search input by Chinese placeholder `代號 / 關鍵字` → type → Enter → screenshot viewport (`fullPage: false`)
 
 ### 2. SFC — CIES Fund List
 - **URL:** `https://www.sfc.hk/en/Regulatory-functions/Products/List-of-Eligible-Collective-Investment-Schemes-under-new-CIES`
-- **Input:** Fund names (up to 10, comma/space separated)
-- **Action:** `captureSfc()` in `src/actions/sfc.ts`
-- **Flow:** Navigate → expand all → search for matching rows → screenshot each match
+- **Input:** Fund names (up to 10)
+- **Flow:** Navigate → expand accordion (`.accordin_expand`) → filter `<tr>` rows by keyword → screenshot each matching row element
 
-### 3. AFRC (Individual) — CPA Individual Register
+### 3. AFRC Individual — CPA Register
 - **URL:** `https://armies.afrc.org.hk/registration/armiesweb.WWP_FE_PC_PublicRegisterList.aspx`
-- **Action:** `captureAfrc()` in `src/actions/afrc.ts`
+- **Selectors:** `#vNAME` (name search), `#vREGNO` (practising number), `#BTNUA_SEARCH` (submit), `#GridContainerDiv` (results)
+- **Flow:** Navigate → fill input → `robustClick` → screenshot full page
 
-### 4. AFRC (Firm) — CPA Firm Register
+### 4. AFRC Firm — CPA Firm Register
 - **URL:** `https://armies.afrc.org.hk/registration/ARMIESWeb.WWP_FE_FMCP_PublicRegisterList.aspx`
-- **Action:** `captureAfrcFirm()` in `src/actions/afrc-firm.ts`
+- **Important:** This is a **different ASP.NET application** from AFRC Individual. Element IDs differ. Do not assume Individual selectors work here — verify against live HTML before adding/changing selectors.
+- **Selectors:** `#vNAME` (English name), `#vCHINESENAME` (Chinese name), `#vREGNO` (registration number) — **confirm these against the live page if they fail**
+- **Flow:** Same pattern as Individual
 
 ---
 
-## Key Design Patterns
+## Serverless / Vercel Constraints
 
-### Keep-Alive Panel Switching
-All 4 tool panels are **always mounted** in the DOM. Only the active panel is visible (`display: block` vs `display: none`). This preserves search inputs, results, and loading states across tab switches without re-mounting. Do not refactor this to conditional rendering.
+This is the most important section for avoiding the recurring bug loop.
 
-### Playwright Must Run in Node.js Runtime
-`next.config.ts` sets `serverExternalPackages: ['playwright', 'playwright-core']`. Server Actions using Playwright must never be moved to the Edge runtime.
+### Hard limits (Vercel Hobby plan)
+- **60s function timeout** — total execution including cold start must stay under ~50s
+- **2048 MB memory** — Chromium alone uses ~400 MB; sparticuz extraction adds more on cold start
 
-### Stealth Playwright Context
-Anti-bot hardening is in `playwright-utils.ts`:
-- Custom user agent mimicking Chrome 120 on macOS
-- `webdriver` property masked
-- Realistic HTTP headers (locale: `zh-HK`, timezone: `Asia/Hong_Kong`)
-- Cookie/consent banner auto-dismissal
-- Robust click with retry logic
+### Timeout budget (AFRC actions)
+| Stage | Budget |
+|---|---|
+| `pkill` + settle | ~0.5s |
+| Browser launch + font load | ~5–8s cold / ~1s warm |
+| `page.goto()` | 25–30s max |
+| `waitForPageReady()` | 6–15s |
+| Input wait + fill | 10–15s |
+| `robustClick` | 8s |
+| Screenshot | ~2s |
 
-### Mock Mode
-Set `MOCK_MODE=true` in `.env.local` to skip Playwright and return placeholder data with a simulated delay. Use for UI development without Chromium.
+Total must sum to < 50s. When adding timeouts, always check the budget.
 
-### Fail Gracefully
-Playwright failures return an SVG placeholder (`FAIL_PLACEHOLDER`) instead of throwing, so the UI always has something to display.
+### Warm-container zombie Chromium
+`@sparticuz/chromium` uses `--single-process`. After `browser.close()`, the OS process takes 1–3s to fully die. A rapid second request on the same warm Lambda container launches a second Chromium before the first exits → OOM → `"browserContext.newPage: Target page, context or browser has been closed"`.
+
+**Fix already in place:** `launchBrowserWithHealing()` runs `pkill -f chromium` + 500ms settle before every launch on serverless.
+
+### fullPage screenshot texture limit
+`page.screenshot({ fullPage: true })` throws `Protocol error (Page.captureScreenshot)` when the page exceeds Chrome's GPU texture size (~16384px). AFRC result pages can be very tall.
+
+**Fix already in place:** try `fullPage:true` → catch → measure `scrollHeight` → `clip` to `min(scrollHeight, 4096px)` → fallback to `fullPage:false`.
+
+### ERR_INSUFFICIENT_RESOURCES
+Caused by too many simultaneous TCP connections (images, fonts, scripts) from a Lambda. If this occurs on AFRC Firm, add `page.route()` before `page.goto()` to block `image`, `font`, `stylesheet`, `media` resource types while keeping `document`, `script`, `xhr`, `fetch`.
+
+### ASP.NET WebForms postback (AFRC sites)
+Both AFRC pages are classic `.aspx` WebForms. Clicking the search button triggers a **full-page POST** — the entire DOM is destroyed and recreated. After `robustClick`, the `#GridContainerDiv` is a fresh element in the new DOM. If `waitFor({state:'visible'})` keeps seeing it as hidden after 21 retries, the navigation has not completed — use `Promise.all([page.waitForNavigation(...), btn.click()])` instead.
+
+---
+
+## `playwright-utils.ts` API
+
+| Export | Purpose |
+|---|---|
+| `launchBrowserWithHealing()` | Launch browser (sparticuz on Vercel, local playwright in dev). Includes zombie-kill on serverless. |
+| `createStealthContext(browser)` | Returns a context with stealth UA, zh-HK locale, masked `navigator.webdriver` |
+| `createStandardContext` | Alias for `createStealthContext` |
+| `waitForPageReady(page, timeout)` | Best-effort `networkidle` then `domcontentloaded`, then 800ms buffer |
+| `ensureUIReady(page)` | Dismisses cookie/consent banners |
+| `robustClick(page, clickSel, waitSel, stage)` | Click + wait for result element, retry once. Throws `AutomationException` on failure. |
+| `FAIL_PLACEHOLDER` | SVG data-URI used in mock-mode responses only; live action failures return `{ success: false, error, errorType }` instead |
+| `AutomationException` | Typed error with `{ errorType, message, stage }` — catch and return `{ success: false }` |
 
 ---
 
 ## Environment Variables
 
-Required in `.env.local`:
-
 ```env
-INTERNAL_API_SECRET=<min 32 chars>   # Server action auth secret
-GEMINI_API_KEY=<your key>            # Reserved for future AI features
-MOCK_MODE=true                       # Optional: skip Playwright
+INTERNAL_API_SECRET=<min 32 chars>   # Required
+GEMINI_API_KEY=<your key>            # Required by Zod schema even though unused — relax schema if not needed
+MOCK_MODE=true                       # Optional — skips Playwright, returns placeholder data
 ```
 
-Validated at startup via Zod in `src/env.ts`. Missing/invalid vars crash fast with clear errors. If `GEMINI_API_KEY` is not needed, the Zod schema must be relaxed — it currently requires both vars.
+`MOCK_MODE` is read directly from `process.env` in each action (not via the Zod schema), so it can be set without `GEMINI_API_KEY` being valid.
 
 ---
 
-## Known Limitations
+## Known Fragilities
 
-- HKEX and SFC CSS selectors are fragile — they break if those sites redesign
-- No auth, no database — results are ephemeral (in-memory only)
-- Gemini AI integration is wired into env but not yet implemented
-- JSZip is installed but ZIP download is not fully wired up
+- **HKEX/SFC selectors** break if those sites redesign — the Chinese-language placeholder `代號 / 關鍵字` and `.accordin_expand` are especially fragile
+- **AFRC selectors** are ASP.NET control IDs — stable within a version but must be verified against live HTML before assuming they're correct (the Firm and Individual pages have separate control hierarchies)
+- **Gemini AI** is in the Zod schema but not implemented
+- **JSZip** is installed but ZIP download is not wired up

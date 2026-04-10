@@ -86,16 +86,12 @@ export async function captureHkex(
     try {
       await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
     } catch (e: unknown) {
-      console.error('[hkex] Navigation failed:', (e as Error).message);
-      // Return placeholder instead of broken icon
+      const message = (e as Error).message ?? 'Failed to navigate to HKEX';
+      console.error('[hkex] Navigation failed:', message);
       return {
-        success: true,
-        result: {
-          query: stockCode,
-          images: [FAIL_PLACEHOLDER],
-          totalMatches: 0,
-          timestamp: Date.now(),
-        },
+        success: false,
+        error: `Failed to load HKEX equities page for "${stockCode}": ${message}`,
+        errorType: 'NAV_FAIL',
       };
     }
 
@@ -195,15 +191,10 @@ export async function captureHkex(
   } catch (error: unknown) {
     console.error('[hkex] Unhandled error:', error);
     if (error instanceof AutomationException) {
-      // Return placeholder image instead of error for better UX
       return {
-        success: true,
-        result: {
-          query: stockCode,
-          images: [FAIL_PLACEHOLDER],
-          totalMatches: 0,
-          timestamp: Date.now(),
-        },
+        success: false,
+        error: error.details.message,
+        errorType: error.details.errorType,
       };
     }
     return {

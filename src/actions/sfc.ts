@@ -74,15 +74,12 @@ export async function captureSfc(
     try {
       await page.goto(SFC_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
     } catch (e: unknown) {
-      console.error('[sfc] Navigation failed:', (e as Error).message);
+      const message = (e as Error).message ?? 'Failed to navigate to SFC';
+      console.error('[sfc] Navigation failed:', message);
       return {
-        success: true,
-        results: fundNames.map((name) => ({
-          query: name,
-          images: [FAIL_PLACEHOLDER],
-          totalMatches: 0,
-          timestamp: Date.now(),
-        })),
+        success: false,
+        error: `Failed to load SFC CIES page: ${message}`,
+        errorType: 'NAV_FAIL',
       };
     }
 
@@ -158,13 +155,13 @@ export async function captureSfc(
           timestamp: Date.now(),
         });
       } catch (e: unknown) {
-        console.error(`[sfc] Error for fund "${fundName}":`, (e as Error).message);
-        captureResults.push({
-          query: fundName,
-          images: [FAIL_PLACEHOLDER],
-          totalMatches: 0,
-          timestamp: Date.now(),
-        });
+        const message = (e as Error).message ?? 'Unknown fund capture error';
+        console.error(`[sfc] Error for fund "${fundName}":`, message);
+        return {
+          success: false,
+          error: `Failed to capture SFC results for fund "${fundName}": ${message}`,
+          errorType: e instanceof AutomationException ? e.details.errorType : 'CAPTURE_FAIL',
+        };
       }
     }
 
