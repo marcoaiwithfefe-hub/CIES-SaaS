@@ -290,3 +290,30 @@ Unit tests would not catch the bug classes historically hitting this project (al
 2. Write implementation plan via `superpowers:writing-plans`.
 3. Run adversarial review (`/codex:adversarial-review`) against the committed spec before implementation.
 4. Execute plan.
+
+## 13. Accepted risks
+
+The 2026-04-20 adversarial review of this spec (Codex) raised two concerns. After discussion with Marco, both are **accepted as known risks rather than blocking items**. Reasoning and reversal triggers below.
+
+### 13.1 No authentication on the public URL
+
+**Accepted because:** the 20 users are all trusted colleagues on an internal team; the tool performs routine compliance lookups against public regulatory sites; the data captured (CPA names, fund names, stock codes) is not commercially sensitive; adding even shared-password auth adds friction for the 5 power users who use this daily. The Cloudflare Tunnel URL is not published anywhere and is only shared directly with teammates.
+
+**Reversal trigger — add auth if ANY of these become true:**
+- The URL is found in a public search result, screenshot, or shared document.
+- The team starts using the tool for lookups that could reveal business intent (e.g., due-diligence targets before an announcement).
+- Team grows beyond ~30 users.
+- The log file shows requests from unfamiliar IPs or from outside normal working hours.
+
+**Lowest-friction remediation if triggered:** add a random high-entropy path prefix (e.g., `/x7k3m9p2q/…`) checked by Next.js middleware. Invalidating it = change the prefix. No passwords, no sign-in flow.
+
+### 13.2 No per-IP rate limiting
+
+**Accepted because:** the concurrency semaphore already caps in-flight captures at 12; queue wait is bounded and brief under legitimate internal load; adding rate-limit code is new complexity and new failure modes (false positives blocking a legitimate power user mid-workflow) for a risk that only materializes if the URL is abused, which is mitigated by 13.1's controls.
+
+**Reversal trigger — add rate limiting if ANY of these become true:**
+- The `/logs` page shows a single IP submitting >20 captures/hour.
+- Legitimate users report queue waits exceeding 10 seconds.
+- Bulk submissions start coming from outside the team.
+
+**Lowest-friction remediation if triggered:** per-IP token bucket in middleware (e.g., 20/min, 3 concurrent, stricter cap on bulk endpoints). ~30 lines using an existing library.
