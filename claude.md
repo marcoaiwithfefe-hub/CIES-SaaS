@@ -4,6 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## 🚧 Active Rebuild — Read This First
+
+This branch (`worktree-rebuild-cies-v2`) is a full rebuild of the app, moving off Vercel (serverless Chromium + 60s timeout) onto an Oracle Cloud Always-Free VM (Docker + Playwright, no timeout cap). Current branch is NOT production — production still runs from `main` on Vercel.
+
+**Authoritative documents:**
+- Design spec: `docs/superpowers/specs/2026-04-20-cies-rebuild-design.md`
+- Implementation plan: `docs/superpowers/plans/2026-04-20-cies-rebuild.md` (22 tasks, 6 phases)
+
+**Phase progress (as of 2026-04-20):**
+- ✅ Phase 0 — Strip Vercel/mock vestiges, add ESLint flat config (`lint` now runs `eslint .`, not `next lint`)
+- ✅ Phase 1 — Backend primitives: `src/lib/semaphore.ts`, `browser-singleton.ts`, `capture-store.ts`, `capture-log.ts`
+- ✅ Phase 2 — Capture logic ported to `src/lib/captures/{hkex,sfc,afrc,afrc-firm}.ts` (pure functions taking a Playwright `Page`); `src/lib/playwright-utils.ts` slimmed from 258 → 81 lines
+- ⏳ Phase 3 — Route Handlers (`/api/capture/*`, `/api/history`, `/api/health`, `/api/self-ping`) + orchestrator (`src/lib/run-capture.ts`) — NEXT
+- ⏳ Phase 4 — UI refactor (shared components, 4 panels, `/logs` viewer)
+- ⏳ Phase 5 — Dockerfile + Oracle deploy script + full CLAUDE.md rewrite (Task 21)
+- ⏳ Phase 6 — Stage-2 VM smoke + DNS cutover (Task 22)
+
+**Important state notes:**
+- `src/actions/*.ts` — STUBBED during rebuild. They preserve type signatures (so the UI still compiles) but return `{ success: false, errorType: 'REBUILD_IN_PROGRESS' }`. Phase 4 removes them.
+- `@sparticuz/chromium` — uninstalled. Use `playwright` (devDep, Docker image bundles Chromium) via the singleton in `browser-singleton.ts`. NEVER reintroduce sparticuz on this branch.
+- `GEMINI_API_KEY`, `isMockMode`, `vercel.json`, `mock-data.ts`, `test-playwright.ts` — all removed.
+- Legacy UI files (`SearchHistory.tsx`, `ScreenshotGallery.tsx`, `ProgressStepper.tsx`, `Sidebar.tsx`, `DashboardLayout.tsx`, `src/app/layout.tsx`) are lint-ignored in `eslint.config.mjs` — Phase 4 replaces them.
+
+**Execution model:**
+Subagent-driven — Sonnet 4.6 implementers, Opus 4.7 (main session) reviews. See `feedback_model_selection_policy.md` in memory.
+
+**User-specific guidance (durable, in memory):**
+- Ask one clarifying question at a time until 95% confident before any non-trivial action
+- Always explain in layman terms with analogies, not jargon
+- Use a UI/UX skill (`ui-ux-pro-max` plugin) for any user-facing UI work
+
+---
+
 ## What Is This?
 
 **CIES Internal Check — Regulatory Auditor** is an internal compliance tool for the Hong Kong financial market. It automates screenshot capture from four live regulatory websites using server-side Playwright. Staff use it to verify equity listings, fund eligibility, and CPA registrations.
@@ -20,7 +53,7 @@ npm run type-check   # tsc --noEmit
 npx playwright install chromium   # Required for local live captures
 ```
 
-No test runner is configured. `test-playwright.ts` exists for manual Playwright testing via `npx ts-node test-playwright.ts`.
+No test runner is configured. Verification per task is `npm run type-check && npm run lint && npm run build`. `lint` runs `eslint .` directly (Next 16 deprecates `next lint`).
 
 ---
 
@@ -31,9 +64,10 @@ No test runner is configured. `test-playwright.ts` exists for manual Playwright 
 | Framework | Next.js 15 (App Router) |
 | Language | TypeScript 5.8 |
 | UI | React 19, Tailwind CSS v4 |
-| Browser Automation | Playwright — server-side only, Node.js runtime |
-| Serverless Chromium | `@sparticuz/chromium@143` + `playwright-core@1.57` |
-| Env Validation | Zod in `src/env.ts` |
+| Browser Automation | Playwright 1.57 (`playwright` devDep for dev; Docker base `mcr.microsoft.com/playwright:v1.57.0-jammy-arm64` in prod) |
+| Concurrency | `p-limit` semaphore (cap 12) in `src/lib/semaphore.ts` |
+| Env Validation | Zod in `src/env.ts` (only `INTERNAL_API_SECRET` + `NODE_ENV` remain) |
+| Deployment target | Oracle Cloud Always-Free ARM VM (ap-tokyo-1) + Docker + Cloudflare Tunnel |
 
 ---
 
