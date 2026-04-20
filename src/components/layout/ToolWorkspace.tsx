@@ -10,10 +10,6 @@ import { Menu } from 'lucide-react';
 
 export type ToolId = 'hkex' | 'sfc' | 'afrc' | 'afrc-firm';
 
-interface ToolWorkspaceProps {
-  isMockMode: boolean;
-}
-
 /**
  * ToolWorkspace — Single-pane-of-glass workspace.
  *
@@ -24,7 +20,7 @@ interface ToolWorkspaceProps {
  * The active tab is also persisted to sessionStorage so a page refresh
  * returns the user to the last-used tool.
  */
-export function ToolWorkspace({ isMockMode }: ToolWorkspaceProps) {
+export function ToolWorkspace() {
   const [activeTab, setActiveTab] = useState<ToolId>(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('activeToolTab');
@@ -123,16 +119,16 @@ export function ToolWorkspace({ isMockMode }: ToolWorkspaceProps) {
               their component state (search inputs, results, etc.)
             */}
             <div style={{ display: activeTab === 'hkex' ? 'block' : 'none' }}>
-              <HkexPanel isMockMode={isMockMode} />
+              <HkexPanel />
             </div>
             <div style={{ display: activeTab === 'sfc' ? 'block' : 'none' }}>
-              <SfcPanel isMockMode={isMockMode} />
+              <SfcPanel />
             </div>
             <div style={{ display: activeTab === 'afrc' ? 'block' : 'none' }}>
-              <AfrcPanel isMockMode={isMockMode} />
+              <AfrcPanel />
             </div>
             <div style={{ display: activeTab === 'afrc-firm' ? 'block' : 'none' }}>
-              <AfrcFirmPanel isMockMode={isMockMode} />
+              <AfrcFirmPanel />
             </div>
           </div>
         </main>

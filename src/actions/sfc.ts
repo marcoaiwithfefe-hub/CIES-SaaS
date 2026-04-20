@@ -6,7 +6,6 @@ import {
   createStealthContext,
   ensureUIReady,
   waitForPageReady,
-  FAIL_PLACEHOLDER,
   AutomationException,
 } from '@/lib/playwright-utils';
 import type { CaptureResult } from './hkex';
@@ -18,7 +17,6 @@ const sfcInputSchema = z.object({
     )
     .min(1, 'At least one fund name required')
     .max(10, 'Maximum 10 fund names per request'),
-  isMockMode: z.boolean().optional().default(false),
 });
 
 export type SfcActionInput = z.infer<typeof sfcInputSchema>;
@@ -48,20 +46,7 @@ export async function captureSfc(
     };
   }
 
-  const { fundNames, isMockMode } = parsed.data;
-
-  if (isMockMode) {
-    await new Promise((r) => setTimeout(r, 1500));
-    return {
-      success: true,
-      results: fundNames.map((name) => ({
-        query: name,
-        images: [FAIL_PLACEHOLDER],
-        totalMatches: 0,
-        timestamp: Date.now(),
-      })),
-    };
-  }
+  const { fundNames } = parsed.data;
 
   let browser;
   try {

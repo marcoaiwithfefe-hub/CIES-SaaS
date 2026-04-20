@@ -13,7 +13,7 @@ const SEARCH_TYPE_LABELS = {
   regNo: { label: 'Registration Number', placeholder: 'e.g. 0001' },
 } as const;
 
-export function AfrcFirmPanel({ isMockMode }: { isMockMode: boolean }) {
+export function AfrcFirmPanel() {
   const [searchType, setSearchType] = useState<'enName' | 'chName' | 'regNo'>('enName');
   const [searchValue, setSearchValue] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
@@ -26,7 +26,7 @@ export function AfrcFirmPanel({ isMockMode }: { isMockMode: boolean }) {
     setResults([]);
 
     startTransition(async () => {
-      const res = await captureAfrcFirm({ searchType, searchValue: searchValue.trim(), isMockMode });
+      const res = await captureAfrcFirm({ searchType, searchValue: searchValue.trim() });
       if (res.success) {
         setResults([res.result]);
       } else {

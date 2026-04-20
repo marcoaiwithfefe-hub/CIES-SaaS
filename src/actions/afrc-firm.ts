@@ -9,13 +9,11 @@ import {
   robustClick,
   AutomationException,
 } from '@/lib/playwright-utils';
-import { buildMockCaptureResult } from '@/lib/mock-data';
 import type { CaptureResult } from './hkex';
 
 const afrcFirmInputSchema = z.object({
   searchType: z.enum(['enName', 'chName', 'regNo']),
   searchValue: z.string().min(1, 'Search value required').max(200, 'Too long'),
-  isMockMode: z.boolean().optional().default(false),
 });
 
 export type AfrcFirmActionInput = z.infer<typeof afrcFirmInputSchema>;
@@ -41,12 +39,7 @@ export async function captureAfrcFirm(
     return { success: false, error: parsed.error.issues.map((i) => i.message).join(', '), errorType: 'VALIDATION_ERROR' };
   }
 
-  const { searchType, searchValue, isMockMode } = parsed.data;
-
-  if (isMockMode) {
-    await new Promise((r) => setTimeout(r, 2000));
-    return { success: true, result: buildMockCaptureResult(searchValue) };
-  }
+  const { searchType, searchValue } = parsed.data;
 
   let browser;
   try {

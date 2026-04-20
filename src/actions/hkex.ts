@@ -6,7 +6,6 @@ import {
   createStealthContext,
   ensureUIReady,
   waitForPageReady,
-  FAIL_PLACEHOLDER,
   AutomationException,
 } from '@/lib/playwright-utils';
 
@@ -17,7 +16,6 @@ const hkexInputSchema = z.object({
     .min(1, 'Stock code is required')
     .max(20, 'Stock code too long')
     .regex(/^[0-9A-Za-z.\-]+$/, 'Invalid stock code format'),
-  isMockMode: z.boolean().optional().default(false),
 });
 
 export type HkexActionInput = z.infer<typeof hkexInputSchema>;
@@ -58,23 +56,9 @@ export async function captureHkex(
     };
   }
 
-  const { stockCode, isMockMode } = parsed.data;
+  const { stockCode } = parsed.data;
 
-  // 2. Mock mode — immediate return, no browser
-  if (isMockMode) {
-    await new Promise((r) => setTimeout(r, 1500));
-    return {
-      success: true,
-      result: {
-        query: stockCode,
-        images: [FAIL_PLACEHOLDER.replace('Capture Failed', 'Mock Mode Active')],
-        totalMatches: 1,
-        timestamp: Date.now(),
-      },
-    };
-  }
-
-  // 3. Live Playwright capture
+  // 2. Live Playwright capture
   let browser;
   try {
     browser = await launchBrowserWithHealing();

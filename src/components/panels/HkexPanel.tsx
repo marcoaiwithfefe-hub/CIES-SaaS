@@ -8,10 +8,6 @@ import { ProgressStepper } from '@/components/shared/ProgressStepper';
 import { CaptureSkeleton } from '@/components/shared/CaptureSkeleton';
 import { ScreenshotGallery } from '@/components/shared/ScreenshotGallery';
 
-interface HkexPanelProps {
-  isMockMode: boolean;
-}
-
 /**
  * HKEX Equities Capture Panel
  *
@@ -22,7 +18,7 @@ interface HkexPanelProps {
  *
  * ui-ux-pro-max: loading-states, ARIA live, keyboard-nav, touch-targets
  */
-export function HkexPanel({ isMockMode }: HkexPanelProps) {
+export function HkexPanel() {
   const [input, setInput] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +44,7 @@ export function HkexPanel({ isMockMode }: HkexPanelProps) {
     startTransition(async () => {
       const newResults: CaptureResult[] = [];
       for (const code of stockCodes) {
-        const res = await captureHkex({ stockCode: code, isMockMode });
+        const res = await captureHkex({ stockCode: code });
         if (res.success) {
           newResults.push(res.result);
           setResults([...newResults]); // stream results in as they arrive

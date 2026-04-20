@@ -7,7 +7,7 @@ import { CaptureButton } from '@/components/shared/CaptureButton';
 import { ProgressStepper } from '@/components/shared/ProgressStepper';
 import { ScreenshotGallery } from '@/components/shared/ScreenshotGallery';
 
-export function AfrcPanel({ isMockMode }: { isMockMode: boolean }) {
+export function AfrcPanel() {
   const [searchType, setSearchType] = useState<'name' | 'regNo'>('name');
   const [searchValue, setSearchValue] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
@@ -20,7 +20,7 @@ export function AfrcPanel({ isMockMode }: { isMockMode: boolean }) {
     setResults([]);
 
     startTransition(async () => {
-      const res = await captureAfrc({ searchType, searchValue: searchValue.trim(), isMockMode });
+      const res = await captureAfrc({ searchType, searchValue: searchValue.trim() });
       if (res.success) {
         setResults([res.result]);
       } else {

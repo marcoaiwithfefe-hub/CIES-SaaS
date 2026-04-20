@@ -18,7 +18,7 @@ import { ScreenshotGallery } from '@/components/shared/ScreenshotGallery';
  *
  * ui-ux-pro-max: loading-states, ARIA live, keyboard-nav
  */
-export function SfcPanel({ isMockMode }: { isMockMode: boolean }) {
+export function SfcPanel() {
   const [input, setInput] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export function SfcPanel({ isMockMode }: { isMockMode: boolean }) {
     setResults([]);
 
     startTransition(async () => {
-      const res = await captureSfc({ fundNames, isMockMode });
+      const res = await captureSfc({ fundNames });
       if (res.success) {
         setResults(res.results);
       } else {

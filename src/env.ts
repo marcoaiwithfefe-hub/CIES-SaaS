@@ -14,11 +14,6 @@ const serverSchema = z.object({
     message: 'INTERNAL_API_SECRET must be at least 32 characters for cryptographic safety',
   }),
 
-  /** Gemini API key for AI features */
-  GEMINI_API_KEY: z.string().min(1, {
-    message: 'GEMINI_API_KEY is required',
-  }),
-
   /** Node environment */
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
