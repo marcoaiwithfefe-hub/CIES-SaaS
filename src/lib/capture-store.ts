@@ -117,7 +117,7 @@ export async function cleanup(): Promise<void> {
     const days = await readdir(toolDir).catch(() => []);
     for (const day of days) {
       const dayMs = Date.parse(day);
-      if (Number.isFinite(dayMs) && dayMs < cutoff - RETENTION_MS) {
+      if (Number.isFinite(dayMs) && dayMs < cutoff) {
         await rm(path.join(toolDir, day), { recursive: true, force: true }).catch(() => {});
       }
     }
