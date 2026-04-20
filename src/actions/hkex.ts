@@ -1,13 +1,6 @@
 'use server';
 
 import { z } from 'zod';
-import {
-  launchBrowserWithHealing,
-  createStealthContext,
-  ensureUIReady,
-  waitForPageReady,
-  AutomationException,
-} from '@/lib/playwright-utils';
 
 // ── Zod input validation ──────────────────────────────────────────────────────
 const hkexInputSchema = z.object({
@@ -38,157 +31,20 @@ export interface HkexActionError {
   errorType?: string;
 }
 
-// HKEX equity search — Chinese language version has the most data
-const HKEX_URL =
-  'https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=zh-HK';
-
 // ── Server Action ─────────────────────────────────────────────────────────────
 export async function captureHkex(
   rawInput: HkexActionInput
 ): Promise<HkexActionResult | HkexActionError> {
-  // 1. Validate
   const parsed = hkexInputSchema.safeParse(rawInput);
   if (!parsed.success) {
     return {
       success: false,
-      error: parsed.error.issues.map((i) => i.message).join(', '),
-      errorType: 'VALIDATION_ERROR',
+      error: parsed.error.errors[0]?.message ?? 'Invalid input',
     };
   }
-
-  const { stockCode } = parsed.data;
-
-  // 2. Live Playwright capture
-  let browser;
-  try {
-    browser = await launchBrowserWithHealing();
-    const context = await createStealthContext(browser);
-    const page = await context.newPage();
-
-    // ── Step 1: Navigate to HKEX equities page ────────────────────────────
-    console.log(`[hkex] Navigating to HKEX for stock: ${stockCode}`);
-    try {
-      await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
-    } catch (e: unknown) {
-      const message = (e as Error).message ?? 'Failed to navigate to HKEX';
-      console.error('[hkex] Navigation failed:', message);
-      return {
-        success: false,
-        error: `Failed to load HKEX equities page for "${stockCode}": ${message}`,
-        errorType: 'NAV_FAIL',
-      };
-    }
-
-    // ── Step 2: Dismiss cookie banners ────────────────────────────────────
-    await ensureUIReady(page);
-
-    // ── Step 2b: Dismiss HKEX-specific notice/disclaimer banners ─────────
-    const hkexCloseSelectors = [
-      '.btn-close',                          // Bootstrap close button
-      'button[aria-label="Close"]',
-      '.modal .close',
-      '.popup-close',
-      '#onetrust-close-btn-container button',
-      '.announcement-close',
-      'a.close',
-    ];
-    for (const sel of hkexCloseSelectors) {
-      try {
-        const btn = page.locator(sel).first();
-        if (await btn.isVisible({ timeout: 800 })) {
-          await btn.click({ force: true, timeout: 800 });
-          await page.waitForTimeout(300).catch(() => {});
-        }
-      } catch {
-        // Not found — try next
-      }
-    }
-
-    // ── Step 3: Wait for the page to fully render before interacting ──────
-    await waitForPageReady(page, 6000);
-
-    // ── Step 4: Search for the stock code ─────────────────────────────────
-    try {
-      // HKEX uses a Chinese-language placeholder on the search box
-      const searchSelectors = [
-        'input[placeholder="代號 / 關鍵字"]',
-        'input[placeholder*="代號"]',
-        'input[name="search"]',
-        '.search-input input',
-        'input[type="search"]',
-      ];
-
-      let searchInput = null;
-      for (const sel of searchSelectors) {
-        const loc = page.locator(sel).first();
-        try {
-          await loc.waitFor({ state: 'visible', timeout: 2500 });
-          searchInput = loc;
-          break;
-        } catch {
-          continue;
-        }
-      }
-
-      if (searchInput) {
-        await searchInput.click();
-        await page.waitForTimeout(150).catch(() => {});
-        await searchInput.fill('');
-        // Type with realistic human delay
-        await searchInput.type(stockCode, { delay: 80 });
-        await page.waitForTimeout(200).catch(() => {});
-        await page.keyboard.press('Enter');
-
-        // Wait for results to appear
-        await page.waitForTimeout(1200).catch(() => {});
-        await waitForPageReady(page, 4000);
-      } else {
-        console.warn('[hkex] Search input not found — capturing full page anyway');
-      }
-    } catch (e: unknown) {
-      console.warn('[hkex] Search step warning:', (e as Error).message);
-      // Continue — take a screenshot of whatever is visible
-    }
-
-    // ── Step 5: Scroll to top and capture ─────────────────────────────────
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(150).catch(() => {});
-
-    const buffer = await page.screenshot({
-      type: 'png',
-      fullPage: false,       // viewport-only = 1280×720, matches requirement
-    });
-
-    const base64 = `data:image/png;base64,${buffer.toString('base64')}`;
-    console.log(`[hkex] Screenshot captured for ${stockCode} (${Math.round(buffer.length / 1024)} KB)`);
-
-    return {
-      success: true,
-      result: {
-        query: stockCode,
-        images: [base64],
-        totalMatches: 1,
-        timestamp: Date.now(),
-      },
-    };
-
-  } catch (error: unknown) {
-    console.error('[hkex] Unhandled error:', error);
-    if (error instanceof AutomationException) {
-      return {
-        success: false,
-        error: error.details.message,
-        errorType: error.details.errorType,
-      };
-    }
-    return {
-      success: false,
-      error: (error as Error).message ?? 'Unknown error',
-      errorType: 'UNKNOWN',
-    };
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
-  }
+  return {
+    success: false,
+    error: 'Server Action disabled during rebuild — use /api/capture/hkex once Phase 3 ships.',
+    errorType: 'REBUILD_IN_PROGRESS',
+  };
 }
