@@ -75,7 +75,10 @@ export async function listHistory(tool: Tool, limit: number): Promise<StoredCapt
     .slice(0, limit);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function readImage(id: string): Promise<{ data: Buffer; meta: StoredCaptureMeta } | null> {
+  if (!UUID_RE.test(id)) return null;
   let tools: Tool[];
   try {
     tools = (await readdir(CAPTURES_ROOT)) as Tool[];

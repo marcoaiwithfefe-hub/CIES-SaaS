@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const schema = z.object({
-  fundNames: z.array(z.string().min(1).max(200).regex(/^[\w\s\-().&,]+$/)).min(1).max(10),
+  fundNames: z.array(z.string().min(1).max(200).regex(/^[\w一-鿿㐀-䶿\s\-().&,]+$/, 'Invalid fund name')).min(1).max(10),
   language: z.enum(['en', 'tc']),
 });
 

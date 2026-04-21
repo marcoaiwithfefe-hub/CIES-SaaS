@@ -31,7 +31,9 @@ fi
 
 echo "==> Preparing data directories"
 sudo mkdir -p "$APP_DIR" "$DATA_DIR/captures" "$DATA_DIR/logs"
-sudo chown -R "$USER:$USER" "$APP_DIR" "$DATA_DIR"
+sudo chown -R "$USER:$USER" "$APP_DIR"
+# pwuser in mcr.microsoft.com/playwright:jammy-arm64 runs as UID 1001
+sudo chown -R 1001:1001 "$DATA_DIR"
 
 echo "==> Cloning or updating repo"
 if [ ! -d "$APP_DIR/.git" ]; then
