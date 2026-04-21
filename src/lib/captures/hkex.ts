@@ -1,13 +1,18 @@
 import type { Page } from 'playwright-core';
 
-const HKEX_URL = 'https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=zh-HK';
+const HKEX_URLS = {
+  tc: 'https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=zh-HK',
+  en: 'https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=en',
+};
 
 export interface HkexCaptureInput {
   stockCode: string;
+  language?: 'en' | 'tc';
 }
 
 export async function captureHkex(page: Page, input: HkexCaptureInput): Promise<Buffer> {
-  await page.goto(HKEX_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  const url = HKEX_URLS[input.language ?? 'tc'];
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   const dismissSelectors = [
     '#onetrust-accept-btn-handler',
@@ -38,13 +43,22 @@ export async function captureHkex(page: Page, input: HkexCaptureInput): Promise<
   }
   await page.waitForTimeout(800).catch(() => {});
 
-  const searchSelectors = [
-    'input[placeholder="代號 / 關鍵字"]',
-    'input[placeholder*="代號"]',
-    'input[name="search"]',
-    '.search-input input',
-    'input[type="search"]',
-  ];
+  const searchSelectors =
+    (input.language ?? 'tc') === 'en'
+      ? [
+          'input[placeholder="Code / Keyword"]',
+          'input[placeholder*="Code"]',
+          'input[name="search"]',
+          '.search-input input',
+          'input[type="search"]',
+        ]
+      : [
+          'input[placeholder="代號 / 關鍵字"]',
+          'input[placeholder*="代號"]',
+          'input[name="search"]',
+          '.search-input input',
+          'input[type="search"]',
+        ];
   for (const sel of searchSelectors) {
     const loc = page.locator(sel).first();
     try {

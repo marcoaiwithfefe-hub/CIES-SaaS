@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 
 const schema = z.object({
   stockCode: z.string().min(1).max(20).regex(/^[0-9A-Za-z.\-]+$/, 'Invalid stock code format'),
+  language: z.enum(['en', 'tc']).default('tc'),
 });
 
 export async function POST(req: NextRequest) {
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
   const result = await orchestrateCapture({
     tool: 'hkex',
     query: parsed.data.stockCode,
+    language: parsed.data.language,
     input: parsed.data,
     run: async (ctx, input) => {
       const page = await ctx.newPage();

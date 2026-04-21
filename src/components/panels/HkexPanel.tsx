@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { DownloadZipButton } from '@/components/shared/DownloadZipButton';
+import { LanguageToggle } from '@/components/shared/LanguageToggle';
 import { RecentCaptures } from '@/components/shared/RecentCaptures';
 import { ScreenshotActions } from '@/components/shared/ScreenshotActions';
 import { CaptureButton } from '@/components/shared/CaptureButton';
@@ -15,6 +16,7 @@ interface CaptureResult {
 
 export function HkexPanel() {
   const [stockCode, setStockCode] = useState('');
+  const [language, setLanguage] = useState<'en' | 'tc'>('tc');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CaptureResult[]>([]);
@@ -29,7 +31,7 @@ export function HkexPanel() {
       const res = await fetch('/api/capture/hkex', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ stockCode: code }),
+        body: JSON.stringify({ stockCode: code, language }),
       });
       const body = await res.json();
       if (!body.success) {
@@ -43,10 +45,10 @@ export function HkexPanel() {
     } finally {
       setLoading(false);
     }
-  }, [stockCode, loading]);
+  }, [stockCode, language, loading]);
 
   const zipItems = results.map((r) => ({
-    filename: `hkex_${r.query}_${new Date(r.timestamp).toISOString().slice(0, 10)}.png`,
+    filename: `hkex_${r.query}_${language}_${new Date(r.timestamp).toISOString().slice(0, 10)}.png`,
     imageSrc: r.image,
   }));
 
@@ -61,14 +63,17 @@ export function HkexPanel() {
       </header>
 
       <div className="rounded-xl p-5 space-y-4" style={{ background: 'var(--color-surface-container)' }}>
-        <label
-          htmlFor="hkex-stockCode"
-          className="block text-sm font-medium"
-          style={{ color: 'var(--color-on-surface)' }}
-        >
-          Stock Code
-          <span className="label-meta block mt-1">Enter a single code (e.g. 0005, 0700, 9988)</span>
-        </label>
+        <div className="flex items-start justify-between gap-3">
+          <label
+            htmlFor="hkex-stockCode"
+            className="block text-sm font-medium"
+            style={{ color: 'var(--color-on-surface)' }}
+          >
+            Stock Code
+            <span className="label-meta block mt-1">Enter a single code (e.g. 0005, 0700, 9988)</span>
+          </label>
+          <LanguageToggle value={language} onChange={setLanguage} />
+        </div>
         <div className="flex gap-3">
           <input
             id="hkex-stockCode"
