@@ -1,141 +1,177 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { captureHkex } from '@/actions/hkex';
-import type { CaptureResult } from '@/actions/hkex';
+import { useCallback, useState } from 'react';
+import { DownloadZipButton } from '@/components/shared/DownloadZipButton';
+import { RecentCaptures } from '@/components/shared/RecentCaptures';
+import { ScreenshotActions } from '@/components/shared/ScreenshotActions';
 import { CaptureButton } from '@/components/shared/CaptureButton';
-import { ProgressStepper } from '@/components/shared/ProgressStepper';
-import { CaptureSkeleton } from '@/components/shared/CaptureSkeleton';
-import { ScreenshotGallery } from '@/components/shared/ScreenshotGallery';
 
-/**
- * HKEX Equities Capture Panel
- *
- * Flow:
- *  1. User enters stock codes → clicks Capture
- *  2. isPending = true → CaptureSkeleton + ProgressStepper visible
- *  3. Server Action returns base64 screenshots → ScreenshotGallery renders
- *
- * ui-ux-pro-max: loading-states, ARIA live, keyboard-nav, touch-targets
- */
+interface CaptureResult {
+  id: string;
+  query: string;
+  image: string; // data:image/png;base64,...
+  timestamp: number;
+}
+
 export function HkexPanel() {
-  const [input, setInput] = useState('');
-  const [results, setResults] = useState<CaptureResult[]>([]);
+  const [stockCode, setStockCode] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [isPending, startTransition] = useTransition();
+  const [results, setResults] = useState<CaptureResult[]>([]);
+  const [refresh, setRefresh] = useState(0);
 
-  const stockCodes = input
-    .split(/[\s,]+/)
-    .map((c) => c.trim())
-    .filter(Boolean);
-
-  const handleCapture = () => {
-    if (stockCodes.length === 0) return;
-    if (stockCodes.length > 10) {
-      setError('Please limit your search to a maximum of 10 stock codes at a time.');
-      return;
-    }
-
+  const capture = useCallback(async () => {
+    const code = stockCode.trim();
+    if (!code || loading) return;
+    setLoading(true);
     setError(null);
-    setResults([]);
-    setPendingCount(stockCodes.length);
-
-    startTransition(async () => {
-      const newResults: CaptureResult[] = [];
-      for (const code of stockCodes) {
-        const res = await captureHkex({ stockCode: code });
-        if (res.success) {
-          newResults.push(res.result);
-          setResults([...newResults]); // stream results in as they arrive
-        } else {
-          setError(`[${res.errorType ?? 'ERROR'}] ${res.error}`);
-          break;
-        }
+    try {
+      const res = await fetch('/api/capture/hkex', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ stockCode: code }),
+      });
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? 'Capture failed');
+      } else {
+        setResults((prev) => [...(body.results as CaptureResult[]), ...prev]);
+        setRefresh((n) => n + 1);
       }
-    });
-  };
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [stockCode, loading]);
+
+  const zipItems = results.map((r) => ({
+    filename: `hkex_${r.query}_${new Date(r.timestamp).toISOString().slice(0, 10)}.png`,
+    imageSrc: r.image,
+  }));
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <header>
         <h1 className="headline-section">HKEX Equities Capture</h1>
         <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--color-on-surface-var)' }}>
-          Execute real-time compliance validation and data capture for listed securities on the
-          Hong Kong Stock Exchange. Verified against CIES-2024 standards.
+          Real-time compliance validation for listed securities on the Hong Kong Stock Exchange.
+          Verified against CIES-2024 standards.
         </p>
       </header>
 
-      {/* Search Form */}
       <div className="rounded-xl p-5 space-y-4" style={{ background: 'var(--color-surface-container)' }}>
         <label
-          htmlFor="stockCodes"
+          htmlFor="hkex-stockCode"
           className="block text-sm font-medium"
           style={{ color: 'var(--color-on-surface)' }}
         >
-          Target Stock Codes
-          <span className="label-meta block mt-1">
-            Enter one or more codes, comma or space separated (max 10)
-          </span>
+          Stock Code
+          <span className="label-meta block mt-1">Enter a single code (e.g. 0005, 0700, 9988)</span>
         </label>
-
         <div className="flex gap-3">
-          <textarea
-            id="stockCodes"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !isPending && input.trim()) {
-                e.preventDefault();
-                handleCapture();
-              }
-            }}
-            className="input-regulatory flex-1 rounded"
-            style={{ minHeight: '88px', resize: 'vertical', borderRadius: '0.5rem 0.5rem 0 0' }}
-            placeholder="e.g. 0700, 9988, 3690"
+          <input
+            id="hkex-stockCode"
+            type="text"
+            value={stockCode}
+            onChange={(e) => setStockCode(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && capture()}
+            placeholder="e.g. 0005"
+            disabled={loading}
+            className="input-regulatory flex-1"
             aria-required="true"
-            aria-describedby="stockCodes-hint"
-            disabled={isPending}
+            aria-describedby="hkex-hint"
           />
-          <CaptureButton
-            isPending={isPending}
-            disabled={!input.trim()}
-            onClick={handleCapture}
-          />
+          <CaptureButton isPending={loading} disabled={!stockCode.trim()} onClick={capture} />
         </div>
-
-        <p id="stockCodes-hint" className="label-meta">
-          Codes: 0005 (HSBC), 0700 (Tencent), 9988 (Alibaba), 3690 (Meituan)
+        <p id="hkex-hint" className="label-meta">
+          Common codes: 0005 (HSBC), 0700 (Tencent), 9988 (Alibaba), 3690 (Meituan)
         </p>
       </div>
 
-      {/* Error Feedback */}
       {error && (
         <div className="error-block" role="alert" aria-live="assertive">
           {error}
+          <button
+            type="button"
+            onClick={capture}
+            className="ml-3 underline text-sm"
+            style={{ color: 'var(--color-error)' }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
-      {/* ── Loading state ─────────────────────────────────────────────────── */}
-      {isPending && (
-        <>
-          {/* Stage progress bar — auto-cycles through Playwright stages */}
-          <ProgressStepper tool="hkex" />
-
-          {/* Skeleton cards — one per queued capture so layout doesn't jump */}
-          <CaptureSkeleton count={pendingCount || stockCodes.length || 1} label="Capturing HKEX…" />
-        </>
+      {loading && (
+        <p className="text-sm animate-pulse" style={{ color: 'var(--color-on-surface-var)' }}>
+          Capturing HKEX {stockCode}…
+        </p>
       )}
 
-      {/* ── Results (streams in as each code completes) ───────────────────── */}
-      {!isPending && (
-        <ScreenshotGallery
-          results={results}
-          prefix="hkex"
-          onClear={() => { setResults([]); setPendingCount(0); }}
-        />
+      {results.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-on-surface)' }}>
+              Results
+              <span className="chip-regulatory ml-2">{results.length}</span>
+            </h2>
+            {results.length > 1 && (
+              <DownloadZipButton
+                items={zipItems}
+                zipName={`hkex_${new Date().toISOString().slice(0, 10)}.zip`}
+              />
+            )}
+          </div>
+
+          {results.map((r) => (
+            <figure key={r.id} className="screenshot-frame m-0">
+              <figcaption
+                className="flex items-center justify-between px-4 py-2 glass"
+                style={{ borderBottom: '1px solid color-mix(in srgb, var(--color-outline-var) 10%, transparent)' }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-mono font-medium" style={{ color: 'var(--color-on-surface)' }}>
+                    {r.query}
+                  </span>
+                  <span className="label-meta">
+                    {new Date(r.timestamp).toLocaleTimeString('en-HK', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <ScreenshotActions
+                  imageSrc={r.image}
+                  filename={zipItems.find((z) => z.imageSrc === r.image)?.filename ?? `hkex_${r.query}.png`}
+                />
+              </figcaption>
+              <div className="p-4 flex justify-center" style={{ background: 'var(--color-surface-highest)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={r.image}
+                  alt={`HKEX capture — ${r.query}`}
+                  className="max-w-full h-auto rounded"
+                  loading="lazy"
+                  style={{ border: '1px solid color-mix(in srgb, var(--color-outline-var) 10%, transparent)' }}
+                />
+              </div>
+            </figure>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setResults([])}
+            className="btn-ghost text-sm"
+            style={{ color: 'var(--color-error)' }}
+          >
+            Clear results
+          </button>
+        </section>
       )}
+
+      <RecentCaptures tool="hkex" refreshKey={refresh} />
     </div>
   );
 }
