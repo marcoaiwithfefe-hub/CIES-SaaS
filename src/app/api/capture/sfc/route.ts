@@ -29,9 +29,10 @@ export async function POST(req: NextRequest) {
 
   return withCaptureSlot(async () => {
     const t0 = Date.now();
-    const browser = await getBrowser();
-    const ctx = await createStealthContext(browser);
+    let ctx: Awaited<ReturnType<typeof createStealthContext>> | undefined;
     try {
+      const browser = await getBrowser();
+      ctx = await createStealthContext(browser);
       const page = await ctx.newPage();
       const items = await captureSfc(page, parsed.data);
       const results = [];
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     } finally {
-      await ctx.close().catch(() => {});
+      await ctx?.close().catch(() => {});
     }
   });
 }

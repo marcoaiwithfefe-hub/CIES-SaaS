@@ -23,9 +23,7 @@ const state: BrowserState =
   });
 
 async function launch(): Promise<Browser> {
-  // Playwright is a devDependency bundled with Chromium; the Docker image
-  // (`mcr.microsoft.com/playwright:v1.57.0-jammy-arm64`) ships the matching browser.
-  const { chromium } = await import('playwright');
+  const { chromium } = await import('playwright-core');
   const browser = await chromium.launch({
     headless: true,
     args: [
