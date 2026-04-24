@@ -22,7 +22,7 @@ RUN npm run build
 FROM base AS runtime
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
-COPY package.json next.config.ts ./
+COPY package.json next.config.js ./
 RUN chown -R pwuser:pwuser /app
 USER pwuser
 

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Is This?
 
-**CIES Internal Check — Regulatory Auditor.** Internal compliance tool for the Hong Kong financial market. Runs server-side Playwright captures against four live regulatory sites for ~20 internal users (5 power users). Rebuilt April 2026 to move off Vercel serverless after an architectural-bug treadmill; now runs as a single long-lived Chromium on an Oracle Cloud Always Free ARM VM.
+**CIES Internal Check — Regulatory Auditor.** Internal compliance tool for the Hong Kong financial market. Runs server-side Playwright captures against four live regulatory sites for ~20 internal users (5 power users). Rebuilt April 2026 to move off Vercel serverless after an architectural-bug treadmill; now runs as a single long-lived Chromium on a GCP e2-micro VM (us-central1-a, project `cies-tool-494207`).
 
 See `docs/superpowers/specs/2026-04-20-cies-rebuild-design.md` for the authoritative design. Section 13 documents accepted risks (no auth, no rate limiting) and their reversal triggers.
 
@@ -31,6 +31,8 @@ CIES_DATA_DIR=/tmp/cies-data \
 npm run dev
 ```
 
+`scripts/smoke.ts` exists but is **stale** — it references old `../src/actions/*` paths that no longer exist. Do not run it.
+
 ---
 
 ## Tech Stack
@@ -51,31 +53,48 @@ src/
 │   │   ├── history/route.ts
 │   │   ├── history/[id]/image/route.ts
 │   │   └── health/route.ts
+│   ├── {sfc,afrc,afrc-firm}/page.tsx                   # Legacy redirects → /
 │   ├── logs/page.tsx                                    # Read-only viewer
 │   ├── layout.tsx
 │   └── page.tsx                                         # Renders ToolWorkspace
 ├── components/
 │   ├── layout/{Sidebar.tsx, ToolWorkspace.tsx}          # Keep-alive switcher
 │   ├── panels/{HkexPanel,SfcPanel,AfrcPanel,AfrcFirmPanel}.tsx
-│   └── shared/{LanguageToggle,BulkInput,ScreenshotActions,DownloadZipButton,RecentCaptures}.tsx
-└── lib/
-    ├── browser-singleton.ts     # Long-lived Chromium + watchdog
-    ├── semaphore.ts             # p-limit wrapper, cap 12
-    ├── capture-store.ts         # /data/captures/<tool>/<YYYY-MM-DD>/<uuid>.png + 24h cleanup
-    ├── capture-log.ts           # JSONL → /data/logs/captures.log
-    ├── self-ping.ts             # Hourly keep-alive
-    ├── run-capture.ts           # Orchestrator: semaphore + context + retry-once + log + store
-    ├── playwright-utils.ts      # Stealth context, robustClick, clipScreenshot
-    └── captures/{hkex,sfc,afrc,afrc-firm}.ts
+│   └── shared/{LanguageToggle,BulkInput,ScreenshotActions,DownloadZipButton,
+│              RecentCaptures,CaptureButton,CaptureSkeleton,SearchForm}.tsx
+├── lib/
+│   ├── browser-singleton.ts     # Long-lived Chromium + watchdog
+│   ├── semaphore.ts             # p-limit wrapper, cap 12
+│   ├── capture-store.ts         # /data/captures/<tool>/<YYYY-MM-DD>/<uuid>.png + 24h cleanup
+│   ├── capture-log.ts           # JSONL → /data/logs/captures.log
+│   ├── self-ping.ts             # Hourly keep-alive
+│   ├── run-capture.ts           # Orchestrator: semaphore + context + retry-once + log + store
+│   ├── playwright-utils.ts      # Stealth context, robustClick, clipScreenshot
+│   └── captures/{hkex,sfc,afrc,afrc-firm}.ts
+└── env.ts                       # Zod-validated env — import this, not process.env
 ```
+
+### Environment variables
+
+**Always use `import { env } from '@/env'`** to access environment variables. `env.ts` validates at startup and will throw a clear error if required vars are missing. Direct `process.env` access bypasses this and should not be used.
 
 ### Keep-Alive Panel Switching
 
 `ToolWorkspace.tsx` always mounts all 4 panels. Only the active one gets `display:block`. Preserves inputs/results/loading across tab switches. **Do not convert to conditional rendering.**
 
+Active tab is persisted to `sessionStorage` (survives refresh, not window close).
+
 ### Runtime model
 
 One `chromium.launch()` at first-request. Each capture opens a fresh `BrowserContext`. Watchdog respawns on disconnect or every 24 h. Concurrency semaphore (cap 12) queues overflow. Bulk captures (SFC loop, AFRC client-side loop) occupy one slot for the whole batch.
+
+**Background services** (`startWatchdog`, `startCleanupTimer`, `startSelfPing`) are bootstrapped lazily — they start on the first call to `/api/health` (or any capture route), not at server startup. In production, the first health check after deploy warms everything up.
+
+### Capture route pattern
+
+Each capture route: validate with Zod → call `orchestrateCapture` from `run-capture.ts` → return `{ success, results }`.
+
+**Exception: `api/capture/sfc/route.ts`** does not use `orchestrateCapture` — it manually wires up `getBrowser` / `createStealthContext` / `withCaptureSlot` / `storeCapture` / `logCapture` because SFC returns multiple results (one per fund name) in a single browser session. If you add a new tool, follow the HKEX/AFRC pattern with `orchestrateCapture`, not the SFC pattern.
 
 ### Retry policy
 
@@ -117,20 +136,22 @@ Navigation failures (`goto`, `net::`, nav timeouts) → silent retry once in `ru
 ```env
 INTERNAL_API_SECRET=<min 32 chars>        # Required
 CIES_DATA_DIR=/data                       # Override for local dev (/tmp/cies-data)
-CIES_SELF_PING_URL=https://.../api/health # Production only, prevents Oracle idle reclaim
+CIES_SELF_PING_URL=https://.../api/health # Production only, prevents GCP idle reclaim
 ```
 
 ---
 
 ## Deployment
 
-Dockerfile builds on Playwright's official ARM64 image. `scripts/deploy-oracle.sh` does one-shot VM setup (Docker, git clone, image build, systemd service, cloudflared install). Manual steps after script: `cloudflared tunnel login/create/route dns`, then set `CIES_SELF_PING_URL` in `.env` and restart.
+GCP VM: `cies-vm`, zone `us-central1-a`, project `cies-tool-494207`. SSH via `gcloud compute ssh cies-vm --project=cies-tool-494207 --zone=us-central1-a`.
+
+Dockerfile builds on Playwright's official ARM64 image. `scripts/deploy-oracle.sh` does one-shot VM setup (Docker, git clone, image build, systemd service, cloudflared install). Manual steps after script: `cloudflared tunnel login/create/route dns`, then set `CIES_SELF_PING_URL` in `/opt/cies/.env` and restart.
 
 ---
 
 ## If you're about to add another serverless-era workaround, stop
 
-The repo's pre-April-2026 history is a bug ledger of workarounds for Vercel serverless constraints (60 s timeout, 2 GB RAM, warm-container zombies, `/tmp` font download, sparticuz version pinning). Those constraints no longer exist in this architecture. If you see a new "browser closed" / "timeout exceeded" / "OOM" class bug, **check the Oracle VM health first** (`/api/health`, `journalctl -u cies`) — do not add `pkill` hacks, texture-fallback patches, or timeout reductions. Recovery is already handled by the watchdog and semaphore.
+The repo's pre-April-2026 history is a bug ledger of workarounds for Vercel serverless constraints (60 s timeout, 2 GB RAM, warm-container zombies, `/tmp` font download, sparticuz version pinning). Those constraints no longer exist in this architecture. If you see a new "browser closed" / "timeout exceeded" / "OOM" class bug, **check the GCP VM health first** (`/api/health`, `journalctl -u cies`) — do not add `pkill` hacks, texture-fallback patches, or timeout reductions. Recovery is already handled by the watchdog and semaphore.
 
 ---
 
