@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 FROM mcr.microsoft.com/playwright:v1.57.0-jammy AS base
 WORKDIR /app
 ENV NODE_ENV=production
