@@ -1,6 +1,5 @@
-import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   // Playwright must run in Node.js runtime, not edge
   serverExternalPackages: ['playwright', 'playwright-core', '@sparticuz/chromium'],
 
@@ -34,4 +33,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
