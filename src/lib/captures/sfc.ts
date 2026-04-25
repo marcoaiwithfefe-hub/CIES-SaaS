@@ -49,11 +49,16 @@ export async function captureSfc(page: Page, input: SfcCaptureInput): Promise<Sf
     const name = rawName.trim();
     if (!name) continue;
     try {
-      const rowLocator = page.locator('tr', { hasText: name }).first();
-      await rowLocator.waitFor({ state: 'visible', timeout: 6000 });
-      await rowLocator.scrollIntoViewIfNeeded();
+      const words = name.split(/\s+/).filter(Boolean);
+      let rowLocator = page.locator('tr');
+      for (const word of words) {
+        rowLocator = rowLocator.filter({ hasText: new RegExp(word, 'i') });
+      }
+      const firstRow = rowLocator.first();
+      await firstRow.waitFor({ state: 'visible', timeout: 6000 });
+      await firstRow.scrollIntoViewIfNeeded();
       await page.waitForTimeout(250);
-      const image = (await rowLocator.screenshot({ type: 'png' })) as Buffer;
+      const image = (await firstRow.screenshot({ type: 'png' })) as Buffer;
       results.push({ query: name, image });
     } catch (e) {
       results.push({ query: name, image: null, error: (e as Error).message });
