@@ -23,22 +23,39 @@ export function HkexPanel() {
   const [refresh, setRefresh] = useState(0);
 
   const capture = useCallback(async () => {
-    const code = stockCode.trim();
-    if (!code || loading) return;
+    const codes = stockCode
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (codes.length === 0 || loading) return;
+
+    const invalid = codes.filter((c) => !/^[0-9A-Za-z.\-]+$/.test(c));
+    if (invalid.length > 0) {
+      setError(`Invalid code${invalid.length > 1 ? 's' : ''}: ${invalid.join(', ')}`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/capture/hkex', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ stockCode: code, language }),
-      });
-      const body = await res.json();
-      if (!body.success) {
-        setError(body.error ?? 'Capture failed');
-      } else {
-        setResults((prev) => [...(body.results as CaptureResult[]), ...prev]);
+      const responses = await Promise.all(
+        codes.map((code) =>
+          fetch('/api/capture/hkex', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ stockCode: code, language }),
+          }).then((r) => r.json()),
+        ),
+      );
+      const failed = responses.filter((b) => !b.success);
+      const succeeded = responses.filter((b) => b.success);
+      if (succeeded.length > 0) {
+        const newResults = succeeded.flatMap((b) => b.results as CaptureResult[]);
+        setResults((prev) => [...newResults, ...prev]);
         setRefresh((n) => n + 1);
+      }
+      if (failed.length > 0) {
+        setError(failed.map((b) => b.error ?? 'Capture failed').join(' | '));
       }
     } catch (e) {
       setError((e as Error).message);
@@ -70,7 +87,7 @@ export function HkexPanel() {
             style={{ color: 'var(--color-on-surface)' }}
           >
             Stock Code
-            <span className="label-meta block mt-1">Enter a single code (e.g. 0005, 0700, 9988)</span>
+            <span className="label-meta block mt-1">Enter one or more codes, comma-separated (e.g. 0005, 0700, 9988)</span>
           </label>
           <LanguageToggle value={language} onChange={setLanguage} />
         </div>
@@ -110,7 +127,7 @@ export function HkexPanel() {
 
       {loading && (
         <p className="text-sm animate-pulse" style={{ color: 'var(--color-on-surface-var)' }}>
-          Capturing HKEX {stockCode}…
+          Capturing {stockCode.split(',').filter((c) => c.trim()).length} HKEX code{stockCode.split(',').filter((c) => c.trim()).length > 1 ? 's' : ''}…
         </p>
       )}
 
