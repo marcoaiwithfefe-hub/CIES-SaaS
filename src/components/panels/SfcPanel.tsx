@@ -42,6 +42,7 @@ export function SfcPanel() {
       } else {
         setResults((prev) => [...(body.results as CaptureResult[]), ...prev]);
         setRefresh((n) => n + 1);
+        if (body.error) setError(body.error);
       }
     } catch (e) {
       setError((e as Error).message);

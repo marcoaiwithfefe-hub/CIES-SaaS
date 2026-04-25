@@ -69,7 +69,12 @@ export async function POST(req: NextRequest) {
           ms: Date.now() - t0,
         });
       }
-      return NextResponse.json({ success: true, results });
+      const failed = items.filter((i) => !i.image);
+      const errorMsg =
+        failed.length > 0
+          ? `Not found on SFC list: ${failed.map((i) => i.query).join(', ')}`
+          : undefined;
+      return NextResponse.json({ success: true, results, error: errorMsg });
     } catch (err) {
       await logCapture({
         t: new Date().toISOString(),

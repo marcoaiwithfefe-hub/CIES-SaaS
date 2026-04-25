@@ -21,13 +21,21 @@ export async function captureSfc(page: Page, input: SfcCaptureInput): Promise<Sf
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   try {
-    const accordion = page.locator('.accordin_expand').first();
-    if (await accordion.isVisible({ timeout: 5000 })) {
-      await accordion.click();
-      await page.waitForTimeout(600);
+    const accordions = page.locator('.accordin_expand');
+    const count = await accordions.count();
+    for (let i = 0; i < count; i++) {
+      try {
+        const accordion = accordions.nth(i);
+        if (await accordion.isVisible({ timeout: 2000 })) {
+          await accordion.click();
+          await page.waitForTimeout(400);
+        }
+      } catch {
+        /* skip non-visible or already-expanded accordion */
+      }
     }
   } catch {
-    /* already expanded or different markup */
+    /* no accordions found — page may render differently */
   }
 
   try {
