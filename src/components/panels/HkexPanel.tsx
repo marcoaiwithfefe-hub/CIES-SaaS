@@ -18,6 +18,7 @@ export function HkexPanel() {
   const [stockCode, setStockCode] = useState('');
   const [language, setLanguage] = useState<'en' | 'tc'>('tc');
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CaptureResult[]>([]);
   const [refresh, setRefresh] = useState(0);
@@ -37,31 +38,28 @@ export function HkexPanel() {
 
     setLoading(true);
     setError(null);
-    try {
-      const responses = await Promise.all(
-        codes.map((code) =>
-          fetch('/api/capture/hkex', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ stockCode: code, language }),
-          }).then((r) => r.json()),
-        ),
-      );
-      const failed = responses.filter((b) => !b.success);
-      const succeeded = responses.filter((b) => b.success);
-      if (succeeded.length > 0) {
-        const newResults = succeeded.flatMap((b) => b.results as CaptureResult[]);
-        setResults((prev) => [...newResults, ...prev]);
-        setRefresh((n) => n + 1);
+    const errors: string[] = [];
+    for (let i = 0; i < codes.length; i++) {
+      setProgress({ current: i + 1, total: codes.length });
+      try {
+        const resp = await fetch('/api/capture/hkex', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ stockCode: codes[i], language }),
+        }).then((r) => r.json());
+        if (resp.success) {
+          setResults((prev) => [...(resp.results as CaptureResult[]), ...prev]);
+          setRefresh((n) => n + 1);
+        } else {
+          errors.push(resp.error ?? 'Capture failed');
+        }
+      } catch (e) {
+        errors.push((e as Error).message);
       }
-      if (failed.length > 0) {
-        setError(failed.map((b) => b.error ?? 'Capture failed').join(' | '));
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
     }
+    setProgress(null);
+    if (errors.length > 0) setError(errors.join(' | '));
+    setLoading(false);
   }, [stockCode, language, loading]);
 
   const zipItems = results.map((r) => ({
@@ -125,9 +123,9 @@ export function HkexPanel() {
         </div>
       )}
 
-      {loading && (
+      {loading && progress && (
         <p className="text-sm animate-pulse" style={{ color: 'var(--color-on-surface-var)' }}>
-          Capturing {stockCode.split(',').filter((c) => c.trim()).length} HKEX code{stockCode.split(',').filter((c) => c.trim()).length > 1 ? 's' : ''}…
+          Capturing code {progress.current} of {progress.total}…
         </p>
       )}
 

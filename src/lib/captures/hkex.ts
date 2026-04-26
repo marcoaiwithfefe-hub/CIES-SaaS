@@ -12,7 +12,7 @@ export interface HkexCaptureInput {
 
 export async function captureHkex(page: Page, input: HkexCaptureInput): Promise<Buffer> {
   const url = HKEX_URLS[input.language ?? 'tc'];
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
   const dismissSelectors = [
     '#onetrust-accept-btn-handler',
