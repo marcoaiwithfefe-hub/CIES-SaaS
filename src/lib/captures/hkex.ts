@@ -17,6 +17,7 @@ export async function captureHkex(page: Page, input: HkexCaptureInput): Promise<
   const dismissSelectors = [
     '#onetrust-accept-btn-handler',
     'button:has-text("Accept All")',
+    'button:has-text("Accept")',
     'button:has-text("同意")',
     '.btn-close',
     'button[aria-label="Close"]',
@@ -46,19 +47,14 @@ export async function captureHkex(page: Page, input: HkexCaptureInput): Promise<
   const searchSelectors =
     (input.language ?? 'tc') === 'en'
       ? [
-          'input[placeholder="Code / Keyword"]',
-          'input[placeholder*="Code"]',
-          'input[name="search"]',
-          '.search-input input',
-          'input[type="search"]',
+          'input[placeholder="Stock Code / Keywords"]',
+          'input[placeholder*="Stock Code"]',
         ]
       : [
           'input[placeholder="代號 / 關鍵字"]',
           'input[placeholder*="代號"]',
-          'input[name="search"]',
-          '.search-input input',
-          'input[type="search"]',
         ];
+  let inputFound = false;
   for (const sel of searchSelectors) {
     const loc = page.locator(sel).first();
     try {
@@ -67,11 +63,15 @@ export async function captureHkex(page: Page, input: HkexCaptureInput): Promise<
       await loc.fill('');
       await loc.type(input.stockCode, { delay: 80 });
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(1200).catch(() => {});
+      await page.waitForTimeout(2500).catch(() => {});
+      inputFound = true;
       break;
     } catch {
       /* try next selector */
     }
+  }
+  if (!inputFound) {
+    throw new Error('HKEX search input not found — site layout may have changed');
   }
 
   await page.evaluate(() => window.scrollTo(0, 0));
