@@ -55,7 +55,7 @@ export async function captureSfc(page: Page, input: SfcCaptureInput): Promise<Sf
         rowLocator = rowLocator.filter({ hasText: new RegExp(word, 'i') });
       }
       const firstRow = rowLocator.first();
-      await firstRow.waitFor({ state: 'visible', timeout: 6000 });
+      await firstRow.waitFor({ state: 'visible', timeout: 20000 });
       await firstRow.scrollIntoViewIfNeeded();
       await page.waitForTimeout(250);
       const image = (await firstRow.screenshot({ type: 'png' })) as Buffer;
