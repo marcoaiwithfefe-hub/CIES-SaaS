@@ -38,6 +38,12 @@ yarn-error.log*
 .vscode/settings.json
 .idea/
 
+# Claude Code runtime
+.claude/scheduled_tasks.lock
+
+# Stale scripts
+scripts/smoke.ts
+
 # Test artifacts
 playwright-report/
 test-results/
